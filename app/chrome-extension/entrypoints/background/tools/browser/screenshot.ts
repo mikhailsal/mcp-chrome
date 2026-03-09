@@ -295,8 +295,9 @@ class ScreenshotTool extends BaseBrowserToolExecutor {
         return {
           content: [
             {
-              type: 'text',
-              text: JSON.stringify({ base64Data, mimeType: compressed.mimeType }),
+              type: 'image',
+              data: base64Data,
+              mimeType: compressed.mimeType,
             },
           ],
           isError: false,

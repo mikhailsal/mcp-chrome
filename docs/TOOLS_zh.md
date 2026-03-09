@@ -145,16 +145,36 @@
 }
 ```
 
-**响应**：
+**响应**（当 `storeBase64: true` 时）：
+
+返回 MCP `ImageContent` — 图片作为原生 MCP 图片块返回，可被 VS Code、Cursor 及其他 MCP 兼容客户端直接渲染：
 
 ```json
 {
-  "success": true,
-  "base64": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
-  "dimensions": {
-    "width": 1920,
-    "height": 1080
-  }
+  "content": [
+    {
+      "type": "image",
+      "data": "/9j/4AAQSkZJRgABAQ...",
+      "mimeType": "image/jpeg"
+    }
+  ],
+  "isError": false
+}
+```
+
+**响应**（当 `savePng: true` 或默认时）：
+
+返回包含已保存文件元数据的文本：
+
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"success\":true,\"tabId\":123,\"url\":\"https://example.com\",\"filename\":\"screenshot.png\"}"
+    }
+  ],
+  "isError": false
 }
 ```
 
@@ -475,7 +495,7 @@
 
 ## 📋 响应格式
 
-所有工具都返回以下格式的响应：
+大多数工具返回以下文本格式的响应：
 
 ```json
 {
@@ -483,6 +503,21 @@
     {
       "type": "text",
       "text": "包含实际响应数据的 JSON 字符串"
+    }
+  ],
+  "isError": false
+}
+```
+
+返回图片的工具（如 `chrome_screenshot` 的 `storeBase64: true`、`chrome_computer` 的 `action=screenshot` 或 `action=zoom`）使用 MCP `ImageContent` 格式：
+
+```json
+{
+  "content": [
+    {
+      "type": "image",
+      "data": "<base64 编码的图片数据>",
+      "mimeType": "image/jpeg"
     }
   ],
   "isError": false

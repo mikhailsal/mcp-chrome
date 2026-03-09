@@ -471,7 +471,7 @@ export const TOOL_SCHEMAS: Tool[] = [
         storeBase64: {
           type: 'boolean',
           description:
-            'return screenshot in base64 format (default: false) if you want to see the page, recommend set this to be true',
+            'Return screenshot as MCP ImageContent (type: image) with base64 data and mimeType (default: false). Set to true when you want to see/analyze the page visually.',
         },
         fullPage: {
           type: 'boolean',

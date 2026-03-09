@@ -149,16 +149,36 @@ Take advanced screenshots with various options.
 }
 ```
 
-**Response**:
+**Response** (when `storeBase64: true`):
+
+Returns MCP `ImageContent` — the image is returned as a native MCP image block, directly renderable by VS Code, Cursor, and other MCP-compatible clients:
 
 ```json
 {
-  "success": true,
-  "base64": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
-  "dimensions": {
-    "width": 1920,
-    "height": 1080
-  }
+  "content": [
+    {
+      "type": "image",
+      "data": "/9j/4AAQSkZJRgABAQ...",
+      "mimeType": "image/jpeg"
+    }
+  ],
+  "isError": false
+}
+```
+
+**Response** (when `savePng: true` or default):
+
+Returns text with metadata about the saved file:
+
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"success\":true,\"tabId\":123,\"url\":\"https://example.com\",\"filename\":\"screenshot.png\"}"
+    }
+  ],
+  "isError": false
 }
 ```
 
@@ -527,7 +547,7 @@ Delete bookmarks by ID or URL.
 
 ## 📋 Response Format
 
-All tools return responses in the following format:
+Most tools return responses in the following text format:
 
 ```json
 {
@@ -535,6 +555,21 @@ All tools return responses in the following format:
     {
       "type": "text",
       "text": "JSON string containing the actual response data"
+    }
+  ],
+  "isError": false
+}
+```
+
+Tools that return images (e.g. `chrome_screenshot` with `storeBase64: true`, `chrome_computer` with `action=screenshot` or `action=zoom`) use MCP `ImageContent`:
+
+```json
+{
+  "content": [
+    {
+      "type": "image",
+      "data": "<base64-encoded image data>",
+      "mimeType": "image/jpeg"
     }
   ],
   "isError": false
