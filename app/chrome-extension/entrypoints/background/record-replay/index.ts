@@ -209,7 +209,7 @@ export function initRecordReplayListeners() {
           }
           saveTrigger(t)
             .then(async () => {
-              await refreshTriggers();
+              await refreshTriggers(true);
               sendResponse({ success: true });
             })
             .catch((e) => sendResponse({ success: false, error: e?.message || String(e) }));
@@ -223,14 +223,14 @@ export function initRecordReplayListeners() {
           }
           deleteTrigger(id)
             .then(async () => {
-              await refreshTriggers();
+              await refreshTriggers(true);
               sendResponse({ success: true });
             })
             .catch((e) => sendResponse({ success: false, error: e?.message || String(e) }));
           return true;
         }
         case BACKGROUND_MESSAGE_TYPES.RR_REFRESH_TRIGGERS: {
-          refreshTriggers()
+          refreshTriggers(true)
             .then(() => sendResponse({ success: true }))
             .catch((e) => sendResponse({ success: false, error: e?.message || String(e) }));
           return true;
@@ -423,41 +423,48 @@ async function removeRecordReplayMenus() {
   rrContextMenuIds.clear();
 }
 
-async function refreshTriggers() {
+async function refreshTriggers(injectIntoAllTabs = false) {
   try {
     const triggers = await listTriggers();
     await refreshContextMenus(triggers);
     await chrome.storage.local.set({ [STORAGE_KEYS.RR_TRIGGERS]: triggers });
-    const domTriggers = triggers
-      .filter((x) => x.type === 'dom' && x.enabled !== false)
-      .map((x: any) => ({
-        id: x.id,
-        selector: x.selector,
-        appear: x.appear !== false,
-        once: x.once !== false,
-        debounceMs: x.debounceMs ?? 800,
-      }));
-    const tabs = await chrome.tabs.query({});
-    for (const t of tabs) {
-      if (!t.id) continue;
-      try {
-        await chrome.scripting.executeScript({
-          target: { tabId: t.id, allFrames: true },
-          files: ['inject-scripts/dom-observer.js'],
-          world: 'ISOLATED',
-        } as any);
-        await chrome.tabs.sendMessage(t.id, {
-          action: 'set_dom_triggers',
-          triggers: domTriggers,
-        } as any);
-      } catch {}
+    // Only inject DOM observer into all open tabs when explicitly requested
+    // (e.g., when user saves/deletes a trigger). On startup, skip this to avoid
+    // reloading all tabs — the webNavigation.onCommitted listener handles
+    // per-tab injection on navigation.
+    if (injectIntoAllTabs) {
+      const domTriggers = triggers
+        .filter((x) => x.type === 'dom' && x.enabled !== false)
+        .map((x: any) => ({
+          id: x.id,
+          selector: x.selector,
+          appear: x.appear !== false,
+          once: x.once !== false,
+          debounceMs: x.debounceMs ?? 800,
+        }));
+      const tabs = await chrome.tabs.query({});
+      for (const t of tabs) {
+        if (!t.id) continue;
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId: t.id, allFrames: true },
+            files: ['inject-scripts/dom-observer.js'],
+            world: 'ISOLATED',
+          } as any);
+          await chrome.tabs.sendMessage(t.id, {
+            action: 'set_dom_triggers',
+            triggers: domTriggers,
+          } as any);
+        } catch {}
+      }
     }
   } catch {}
 }
 
 // Backward-compatible init function; initialize all trigger-related hooks/state
 async function initTriggerEngine() {
-  await refreshTriggers();
+  // On startup, only refresh menus and storage — don't inject into all tabs
+  await refreshTriggers(false);
 }
 
 // Ensure core content scripts are present for a tab after navigation
