@@ -521,17 +521,17 @@ function getRunStatusColor(run: RunLite): string {
 function getRunStatusText(run: RunLite): string {
   if (run.status) {
     const statusMap: Record<string, string> = {
-      queued: '排队中',
-      running: '运行中',
-      paused: '已暂停',
-      succeeded: '成功',
-      failed: '失败',
-      canceled: '已取消',
+      queued: 'Queued',
+      running: 'Running',
+      paused: 'Paused',
+      succeeded: 'Succeeded',
+      failed: 'Failed',
+      canceled: 'Canceled',
     };
     return statusMap[run.status] || run.status;
   }
   // V2 fallback
-  return run.success ? '成功' : '失败';
+  return run.success ? 'Succeeded' : 'Failed';
 }
 
 function formatTime(dateStr: string): string {

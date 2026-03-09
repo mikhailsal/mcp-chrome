@@ -68,44 +68,44 @@
           </div>
         </div>
 
-        <!-- 快捷工具卡片 -->
+        <!-- Quick tools -->
         <div class="section">
-          <h2 class="section-title">快捷工具</h2>
+          <h2 class="section-title">Quick Tools</h2>
           <div class="rr-icon-buttons">
             <button
               class="rr-icon-btn rr-icon-btn-record rr-icon-btn-coming-soon has-tooltip"
               @click="startRecording"
-              data-tooltip="录制功能开发中"
+              data-tooltip="Recording is coming soon"
             >
               <RecordIcon :recording="false" />
             </button>
             <button
               class="rr-icon-btn rr-icon-btn-stop rr-icon-btn-coming-soon has-tooltip"
               @click="stopRecording"
-              data-tooltip="录制功能开发中"
+              data-tooltip="Recording is coming soon"
             >
               <StopIcon />
             </button>
             <button
               class="rr-icon-btn rr-icon-btn-edit has-tooltip"
               @click="toggleWebEditor"
-              data-tooltip="开启页面编辑模式"
+              data-tooltip="Open page editor"
             >
               <EditIcon />
             </button>
             <button
               class="rr-icon-btn rr-icon-btn-marker has-tooltip"
               @click="toggleElementMarker"
-              data-tooltip="开启元素标注"
+              data-tooltip="Start element marker"
             >
               <MarkerIcon />
             </button>
           </div>
         </div>
 
-        <!-- 管理入口卡片 -->
+        <!-- Management entries -->
         <div class="section">
-          <h2 class="section-title">管理入口</h2>
+          <h2 class="section-title">Management</h2>
           <div class="entry-card">
             <button class="entry-item" @click="openAgentSidepanel">
               <div class="entry-icon agent">
@@ -125,8 +125,8 @@
                 </svg>
               </div>
               <div class="entry-content">
-                <span class="entry-title">智能助手</span>
-                <span class="entry-desc">AI Agent 对话与任务</span>
+                <span class="entry-title">Agent Chat</span>
+                <span class="entry-desc">AI agent conversations and tasks</span>
               </div>
               <svg
                 class="entry-arrow"
@@ -146,10 +146,10 @@
               </div>
               <div class="entry-content">
                 <span class="entry-title">
-                  工作流管理
+                  Workflow Management
                   <span class="coming-soon-badge">Coming Soon</span>
                 </span>
-                <span class="entry-desc">录制与回放自动化流程</span>
+                <span class="entry-desc">Record and replay automation flows</span>
               </div>
               <svg
                 class="entry-arrow"
@@ -181,8 +181,8 @@
                 </svg>
               </div>
               <div class="entry-content">
-                <span class="entry-title">元素标注管理</span>
-                <span class="entry-desc">管理页面元素标注</span>
+                <span class="entry-title">Element Marker Management</span>
+                <span class="entry-desc">Manage page element markers</span>
               </div>
               <svg
                 class="entry-arrow"
@@ -214,8 +214,8 @@
                 </svg>
               </div>
               <div class="entry-content">
-                <span class="entry-title">本地模型</span>
-                <span class="entry-desc">语义引擎与模型管理</span>
+                <span class="entry-title">Local Models</span>
+                <span class="entry-desc">Semantic engine and model management</span>
               </div>
               <svg
                 class="entry-arrow"
@@ -262,7 +262,7 @@
       </div>
     </div>
 
-    <!-- 本地模型二级页面 -->
+    <!-- Local models page -->
     <LocalModelPage
       v-show="currentView === 'local-model'"
       :semantic-engine-status="semanticEngineStatus"
@@ -310,7 +310,7 @@
       @cancel="hideClearDataConfirmation"
     />
 
-    <!-- 侧边栏承担工作流管理；编辑器在独立窗口中打开 -->
+    <!-- Workflow management lives in the sidepanel; editor opens in a separate window -->
 
     <!-- Coming Soon Toast -->
     <Transition name="toast">
@@ -325,7 +325,7 @@
           <circle cx="12" cy="12" r="10" />
           <path d="M12 6v6l4 2" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
-        <span>{{ comingSoonToast.feature }} 功能开发中，敬请期待</span>
+        <span>{{ comingSoonToast.feature }} is coming soon</span>
       </div>
     </Transition>
   </div>
@@ -366,10 +366,10 @@ import {
   MarkerIcon,
 } from './components/icons';
 
-// AgentChat theme - 从preload中获取，保持与sidepanel一致
+// AgentChat theme: get it from preload to stay aligned with the sidepanel.
 const { theme: agentTheme, initTheme } = useAgentTheme();
 
-// 当前视图状态：首页 or 本地模型页
+// Current view state: home or local models page.
 const currentView = ref<'home' | 'local-model'>('home');
 
 // Coming Soon Toast
@@ -432,8 +432,8 @@ function isFlowBoundToCurrent(flow: any) {
 
 // 运行记录与覆盖项在侧边栏页面查看
 const startRecording = async () => {
-  // TODO: 录制回放功能开发中，暂时拦截
-  showComingSoonToast('录制回放');
+  // TODO: Record and replay is not implemented yet.
+  showComingSoonToast('Record & Replay');
   return;
   // if (rrRecording.value) return;
   // try {
@@ -449,8 +449,8 @@ const startRecording = async () => {
 };
 
 const stopRecording = async () => {
-  // TODO: 录制回放功能开发中，暂时拦截
-  showComingSoonToast('录制回放');
+  // TODO: Record and replay is not implemented yet.
+  showComingSoonToast('Record & Replay');
   return;
   // if (!rrRecording.value) return;
   // try {
@@ -495,7 +495,7 @@ const runFlow = async (flowId: string) => {
         const logs = result.logs || [];
         const failed = logs.find((l: any) => l.status === 'failed');
         if (failed && failed.stepId) {
-          // 打开独立编辑窗口并定位失败节点
+          // Open the standalone editor and focus the failed node.
           if (flow) openBuilderWindow(flow.id, String(failed.stepId));
         }
       } else if (result && result.success === true) {
@@ -510,7 +510,7 @@ const runFlow = async (flowId: string) => {
   }
 };
 
-// 旧的“克隆/发布/定时/覆盖项”在侧边栏或编辑器中处理
+// Legacy clone/publish/schedule/override actions are handled in the sidepanel or editor.
 
 const nativeConnectionStatus = ref<'unknown' | 'connected' | 'disconnected'>('unknown');
 const isConnecting = ref(false);
@@ -632,10 +632,10 @@ async function openSidepanelAndClose(tab: string) {
   }
 }
 
-// Open sidepanel from popup for workflow management
+// Open sidepanel from popup for workflow management.
 function openWorkflowSidepanel() {
-  // TODO: 工作流功能开发中，暂时拦截
-  showComingSoonToast('工作流管理');
+  // TODO: Workflow management is not implemented in the popup yet.
+  showComingSoonToast('Workflow Management');
   // openSidepanelAndClose('workflows');
 }
 
@@ -653,7 +653,7 @@ async function toggleWebEditor() {
   try {
     await chrome.runtime.sendMessage({ type: BACKGROUND_MESSAGE_TYPES.WEB_EDITOR_TOGGLE });
   } catch (error) {
-    console.warn('切换网页编辑模式失败:', error);
+    console.warn('Failed to toggle page editor:', error);
   }
 }
 
@@ -662,17 +662,17 @@ async function toggleElementMarker() {
     // 获取当前活动tab
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) {
-      console.warn('无法获取当前tab');
+      console.warn('Unable to get current tab');
       return;
     }
 
-    // 向background发送消息，启动元素标注
+    // Ask background to start element marking.
     await chrome.runtime.sendMessage({
       type: BACKGROUND_MESSAGE_TYPES.ELEMENT_MARKER_START,
       tabId: tab.id,
     });
   } catch (error) {
-    console.warn('开启元素标注失败:', error);
+    console.warn('Failed to start element marker:', error);
   }
 }
 

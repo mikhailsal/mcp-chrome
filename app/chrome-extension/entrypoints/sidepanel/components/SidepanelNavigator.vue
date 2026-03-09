@@ -12,7 +12,7 @@
       :class="{ 'navigator-trigger-active': isOpen }"
       @click="handleTriggerClick"
       @dblclick="resetToDefault"
-      title="切换页面（可拖拽移动，双击重置位置）"
+      title="Switch pages (drag to move, double-click to reset position)"
     >
       <svg
         class="navigator-icon"
@@ -32,7 +32,7 @@
       <div v-if="isOpen" class="navigator-overlay" @click="closeMenu">
         <div class="navigator-menu" :style="menuStyle" @click.stop>
           <div class="navigator-header">
-            <span class="navigator-title">切换页面</span>
+            <span class="navigator-title">Switch Page</span>
             <button class="navigator-close" @click="closeMenu">
               <svg
                 viewBox="0 0 24 24"
@@ -69,8 +69,8 @@
                 </svg>
               </div>
               <div class="navigator-item-content">
-                <span class="navigator-item-title">智能助手</span>
-                <span class="navigator-item-desc">AI Agent 对话与任务</span>
+                <span class="navigator-item-title">Agent Chat</span>
+                <span class="navigator-item-desc">AI agent conversations and tasks</span>
               </div>
               <div v-if="activeTab === 'agent-chat'" class="navigator-item-check">
                 <svg
@@ -107,8 +107,8 @@
                 </svg>
               </div>
               <div class="navigator-item-content">
-                <span class="navigator-item-title">工作流管理</span>
-                <span class="navigator-item-desc">录制与回放自动化流程</span>
+                <span class="navigator-item-title">Workflow Management</span>
+                <span class="navigator-item-desc">Record and replay automation flows</span>
               </div>
               <div v-if="activeTab === 'workflows'" class="navigator-item-check">
                 <svg
@@ -145,8 +145,8 @@
                 </svg>
               </div>
               <div class="navigator-item-content">
-                <span class="navigator-item-title">元素标注管理</span>
-                <span class="navigator-item-desc">管理页面元素标注</span>
+                <span class="navigator-item-title">Element Marker Management</span>
+                <span class="navigator-item-desc">Manage page element markers</span>
               </div>
               <div v-if="activeTab === 'element-markers'" class="navigator-item-check">
                 <svg
