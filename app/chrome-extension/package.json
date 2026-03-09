@@ -8,8 +8,10 @@
   "scripts": {
     "dev": "wxt",
     "dev:firefox": "wxt -b firefox",
+    "dev:watch": "node scripts/watch-build.mjs",
     "build": "wxt build",
     "build:firefox": "wxt build -b firefox",
+    "build:dev": "wxt build --mode development",
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
     "compile": "vue-tsc --noEmit",

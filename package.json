@@ -14,6 +14,7 @@
     "dev:shared": "pnpm --filter chrome-mcp-shared dev",
     "dev:native": "pnpm --filter mcp-chrome-bridge dev",
     "dev:extension": "pnpm --filter chrome-mcp-server dev",
+    "dev:extension:watch": "pnpm --filter chrome-mcp-server dev:watch",
     "dev": "pnpm --filter chrome-mcp-shared build && pnpm -r --parallel dev",
     "lint": "pnpm -r lint",
     "lint:fix": "pnpm -r lint:fix",

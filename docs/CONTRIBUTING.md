@@ -171,6 +171,46 @@ For feature requests, please provide:
 - **Alternatives**: Any alternative solutions considered?
 - **Additional context**: Screenshots, examples, etc.
 
+## ⚠️ Development Gotchas
+
+### Do NOT use `wxt` dev server directly
+
+The WXT dev server (`wxt` / `pnpm dev:extension`) injects a WebSocket hot-reload mechanism that
+reloads **all open browser tabs** on every content script change. This is a
+[known WXT issue](https://github.com/wxt-dev/wxt/issues/975) and can freeze your browser.
+
+**Use the watch-build workflow instead:**
+
+```bash
+# From repo root:
+pnpm dev:extension:watch
+
+# Or from app/chrome-extension/:
+pnpm dev:watch
+```
+
+This uses `wxt build --mode development` (with sourcemaps, without the dev server's reload code)
+and watches for file changes to rebuild automatically. After a rebuild, reload the extension
+manually on `chrome://extensions/` (Alt+R or the reload button).
+
+### First-time dependency installation
+
+`pnpm install` may fail because `app/native-server/postinstall` requires pre-built artifacts.
+Run `pnpm install --ignore-scripts` first, build the packages, then re-run install if needed:
+
+```bash
+pnpm install --ignore-scripts
+pnpm run build:shared
+cd app/native-server && npx ts-node src/scripts/build.ts
+```
+
+### Dev extension ID differs from production
+
+When you load the extension unpacked in Chrome, it gets a different extension ID than the
+published version. You must add your dev extension ID to the native messaging host manifest
+(`~/.config/google-chrome/NativeMessagingHosts/com.chromemcp.nativehost.json`) in the
+`allowed_origins` array for native messaging to work.
+
 ## 🔧 Development Tips
 
 ### Using WASM SIMD
