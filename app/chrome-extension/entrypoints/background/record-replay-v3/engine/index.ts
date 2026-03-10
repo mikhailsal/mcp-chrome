@@ -1,5 +1,5 @@
 /**
- * @fileoverview Engine 层导出入口
+ * @fileoverview Engine-layer exports.
  */
 
 // Kernel
@@ -23,5 +23,5 @@ export * from './recovery';
 // Triggers
 export * from './triggers';
 
-// Storage Port
+// Storage port
 export * from './storage';

@@ -23,7 +23,6 @@ const CONTEXT_MENU_ID = 'element_marker_mark';
  */
 function extractToolError(result: any): string | undefined {
   if (!result) return undefined;
-
   // Check for error in result content array
   if (Array.isArray(result.content)) {
     for (const item of result.content) {
@@ -54,7 +53,7 @@ async function ensureContextMenu() {
     } catch {}
     await chrome.contextMenus.create({
       id: CONTEXT_MENU_ID,
-      title: '标注元素',
+      title: 'Mark Element',
       contexts: ['all'],
     });
   } catch (e) {

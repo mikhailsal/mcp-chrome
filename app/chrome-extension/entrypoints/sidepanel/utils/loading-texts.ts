@@ -1,59 +1,59 @@
 /**
- * 随机 Loading 文案
- * 用于 TimelineStatusStep 组件展示趣味等待提示
+ * Random loading copy.
+ * Used by the TimelineStatusStep component for playful waiting hints.
  */
 
 const loadingTexts = [
-  // 必选神梗
-  '本来应该从从容容游刃有余',
-  '现在是匆匆忙忙连滚带爬',
-  '我知道你很急，但是先别急',
-  '在知识的海洋里狗刨',
-  '让子弹再飞一会儿',
-  '正在为您手搓答案',
-  '浪浪山小妖怪集结中',
-  '别催，已经在写了（新建文件夹）',
-  '正在汗流浃背地思考中',
-  'CPU 都要给我干烧了',
-  // 生活气息
-  '村咖慢焙，精华需要时间',
-  '知识煎饼翻面中',
-  '敬自己一杯，马上好',
-  '正在把灵感放入烤箱',
-  '让答案再泡一会儿',
-  '情绪价值拉满中',
-  '正在为您编织语言的毛衣',
-  // 脑洞大开
-  '神经元蹦迪中',
-  '熬夜的猫头鹰在思考',
-  '给答案上色中',
-  '正在疯狂翻阅知识库',
-  '大脑马戏团开演',
-  '正在把 0 和 1 捏在一起',
-  '正在憋个大招',
-  '放大镜有点起雾，擦擦',
-  '试图理解这个离谱的需求',
-  // 玄幻
-  '正在施法，莫打扰',
-  '唤醒硅基朋友',
-  '正在连接赛博空间的智慧',
-  '道友请留步，正在推演',
-  '穿越知识黑洞',
-  '正在反向解析人类意图',
-  '水晶球有点模糊，拍两下',
-  // 职场
-  '代码跑得比记者还快',
-  '主理人已上线，请稍候',
-  '快马加鞭赶来中',
-  '正在光速搬运知识',
-  '拼图最后一块',
-  '答案即将杀青',
-  '发射倒计时',
-  '目标锁定中',
+  // Must-have meme energy.
+  'This should have been effortless.',
+  'Instead, we are sprinting downhill.',
+  'I know you are in a hurry, but wait a second.',
+  'Dog-paddling through the ocean of knowledge.',
+  'Let the answer cook a little longer.',
+  'Handcrafting your answer right now.',
+  'Assembling the crew from Langlang Mountain.',
+  'Do not rush me, it is already in progress.',
+  'Thinking hard and visibly sweating.',
+  'The CPU is about to overheat.',
+  // Everyday-life flavor.
+  'Slow-roasting the good stuff.',
+  'Flipping the knowledge pancake.',
+  'One quick toast and it will be ready.',
+  'Putting inspiration into the oven.',
+  'Let the answer steep a bit longer.',
+  'Dialing the emotional support to maximum.',
+  'Knitting a sweater out of language.',
+  // Imagination mode.
+  'Neurons are dancing.',
+  'A sleep-deprived owl is thinking.',
+  'Adding color to the answer.',
+  'Rummaging through the knowledge base at full speed.',
+  'The brain circus is in town.',
+  'Trying to squeeze 0 and 1 together.',
+  'Charging up a big move.',
+  'The magnifying glass fogged up, wiping it off.',
+  'Trying to understand this unreasonable request.',
+  // Fantasy mode.
+  'Casting a spell, do not disturb.',
+  'Waking up the silicon-based allies.',
+  'Connecting to the wisdom of cyberspace.',
+  'Hold on, fellow traveler, calculations are underway.',
+  'Crossing a knowledge black hole.',
+  'Reverse-engineering human intent.',
+  'The crystal ball is blurry, giving it a tap.',
+  // Workplace mode.
+  'Code is moving faster than the news cycle.',
+  'The lead just clocked in, one moment.',
+  'Rushing over at full speed.',
+  'Hauling knowledge at light speed.',
+  'Finding the last puzzle piece.',
+  'The answer is almost picture-wrapped.',
+  'Launch countdown in progress.',
+  'Target locked.',
 ];
 
 /**
- * 获取随机 Loading 文案
+ * Get a random loading line.
  */
 export function getRandomLoadingText(): string {
   return loadingTexts[Math.floor(Math.random() * loadingTexts.length)];

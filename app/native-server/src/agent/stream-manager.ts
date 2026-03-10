@@ -12,8 +12,9 @@ const WEBSOCKET_OPEN_STATE = 1;
 /**
  * AgentStreamManager manages SSE/WebSocket connections keyed by sessionId.
  *
- * 中文说明：此实现参考 other/cweb 中的 StreamManager，但适配 Fastify/Node HTTP，
- * 使用 ServerResponse 直接写入 SSE 数据，避免在 Node 环境中额外引入 Web Streams 依赖。
+ * This implementation follows the StreamManager pattern from other/cweb, but is
+ * adapted for Fastify and Node HTTP. It writes SSE payloads directly through
+ * ServerResponse to avoid adding an extra Web Streams dependency on Node.
  */
 export class AgentStreamManager {
   private readonly sseClients = new Map<string, Set<ServerResponse>>();

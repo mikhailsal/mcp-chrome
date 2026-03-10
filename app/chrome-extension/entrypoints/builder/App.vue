@@ -2,8 +2,8 @@
   <!-- rr-theme container provides CSS variables; data-theme for light/dark -->
   <div class="builder-page rr-theme" :data-theme="theme">
     <div v-if="fallbackNotice" class="notice-top">
-      <span>已应用回退建议：提升 {{ fallbackNotice.type }} 优先级</span>
-      <button class="mini" @click="undoFallbackPromotion">撤销</button>
+      <span>Applied fallback suggestion: raised {{ fallbackNotice.type }} priority</span>
+      <button class="mini" @click="undoFallbackPromotion">Undo</button>
     </div>
 
     <div class="main">
@@ -26,10 +26,10 @@
       <div class="topbar rr-topbar backdrop-blur">
         <div class="left">
           <strong class="text-[var(--rr-text)]">{{ title }}</strong>
-          <span class="tip">工作流可视化编排</span>
+          <span class="tip">Visual workflow orchestration</span>
         </div>
         <div class="right">
-          <button class="top-btn" @click="exportFlow" title="导出 JSON">
+          <button class="top-btn" @click="exportFlow" title="Export JSON">
             <svg
               width="14"
               height="14"
@@ -40,9 +40,9 @@
             >
               <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
             </svg>
-            导出
+            Export
           </button>
-          <label class="top-btn import" title="导入 JSON">
+          <label class="top-btn import" title="Import JSON">
             <svg
               width="14"
               height="14"
@@ -53,10 +53,10 @@
             >
               <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" />
             </svg>
-            导入
+            Import
             <input type="file" accept="application/json" @change="onImport" />
           </label>
-          <button class="top-btn" @click="openRename" title="重命名工作流">
+          <button class="top-btn" @click="openRename" title="Rename workflow">
             <svg
               width="14"
               height="14"
@@ -74,7 +74,7 @@
             class="top-btn"
             :class="{ active: triggerPanelVisible }"
             @click="triggerPanelVisible = !triggerPanelVisible"
-            title="管理触发器"
+            title="Manage triggers"
           >
             <svg
               width="14"
@@ -93,7 +93,7 @@
             class="top-btn"
             :disabled="!selectedId"
             @click="runFromSelected"
-            title="从选中节点回放"
+            title="Replay from selected node"
           >
             <svg
               width="14"
@@ -105,9 +105,9 @@
             >
               <polygon points="5 3 19 12 5 21 5 3" />
             </svg>
-            从选中运行
+            Run from selection
           </button>
-          <button class="top-btn primary" @click="runAll" title="从头回放整流">
+          <button class="top-btn primary" @click="runAll" title="Replay from start">
             <svg
               width="14"
               height="14"
@@ -527,8 +527,8 @@ function schId(flowId: string, nodeId: string, idx: number): TriggerId {
 }
 
 /**
- * 将 V2 schedule 配置转换为 cron 表达式
- * @returns cron 表达式或 null（如果无法转换）
+ * Convert a V2 schedule config to a cron expression
+ * @returns A cron expression, or null if conversion is not possible
  */
 function scheduleToCron(schedule: { type?: string; when?: string }): string | null {
   if (!schedule) return null;
@@ -555,13 +555,13 @@ function scheduleToCron(schedule: { type?: string; when?: string }): string | nu
     return `${minute} ${hour} * * *`;
   }
 
-  // V3 cron 不支持 'once' 一次性定时
+  // V3 cron does not support one-time 'once' schedules
   return null;
 }
 
 /**
- * 从 trigger 节点配置同步触发器到 V3 存储
- * @description V2 schedules 会转换为 V3 cron triggers
+ * Sync triggers from trigger node configuration into V3 storage
+ * @description V2 schedules are converted into V3 cron triggers
  */
 async function syncTriggersAndSchedules(flowId: string, nodes: unknown[]) {
   const triggersNeeded: TriggerSpec[] = [];
@@ -631,12 +631,12 @@ async function syncTriggersAndSchedules(flowId: string, nodes: unknown[]) {
           const scheduleType = String(s?.type || 'unknown');
           if (scheduleType === 'once') {
             pushToast(
-              `节点 ${n.id} 的定时 #${i + 1}: V3 暂不支持一次性定时（once），已跳过`,
+              `Node ${n.id} schedule #${i + 1}: V3 does not support one-time schedules (once) yet, skipped`,
               'warn',
             );
           } else {
             pushToast(
-              `节点 ${n.id} 的定时 #${i + 1}: 无法转换为 cron（type=${scheduleType}），已跳过`,
+              `Node ${n.id} schedule #${i + 1}: could not convert to cron (type=${scheduleType}), skipped`,
               'warn',
             );
           }
@@ -710,7 +710,7 @@ async function exportFlow() {
     } as chrome.downloads.DownloadOptions);
     URL.revokeObjectURL(url);
   } catch (e) {
-    pushToast(`导出失败：${e instanceof Error ? e.message : String(e)}`, 'error');
+    pushToast(`Export failed: ${e instanceof Error ? e.message : String(e)}`, 'error');
   }
 }
 
@@ -725,7 +725,7 @@ async function onImport(e: Event) {
     const candidates = extractFlowCandidates(parsed);
 
     if (!candidates.length) {
-      pushToast('导入失败：未找到工作流数据', 'error');
+      pushToast('Import failed: no workflow data found', 'error');
       return;
     }
 
@@ -763,7 +763,7 @@ async function onImport(e: Event) {
       await save(); // Convert and save as V3
     }
   } catch (e) {
-    pushToast(`导入失败：${e instanceof Error ? e.message : String(e)}`, 'error');
+    pushToast(`Import failed: ${e instanceof Error ? e.message : String(e)}`, 'error');
   } finally {
     input.value = '';
   }
@@ -787,7 +787,7 @@ async function runFromSelected() {
       ...(startNodeId ? { startNodeId: startNodeId as NodeId } : {}),
     });
   } catch (e) {
-    pushToast(`运行失败：${e instanceof Error ? e.message : String(e)}`, 'error');
+    pushToast(`Run failed: ${e instanceof Error ? e.message : String(e)}`, 'error');
   }
 }
 
@@ -801,7 +801,7 @@ async function runAll() {
     await rpc.ensureConnected();
     await rpc.request('rr_v3.enqueueRun', { flowId: saved.id as FlowId });
   } catch (e) {
-    pushToast(`运行失败：${e instanceof Error ? e.message : String(e)}`, 'error');
+    pushToast(`Run failed: ${e instanceof Error ? e.message : String(e)}`, 'error');
   }
 }
 

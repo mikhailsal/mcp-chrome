@@ -5,7 +5,7 @@
     :style="wrapperStyle"
     :class="{ 'navigator-dragging': isDragging }"
   >
-    <!-- 触发按钮（同时作为拖拽手柄） -->
+    <!-- Trigger button, which also acts as the drag handle. -->
     <button
       ref="triggerRef"
       class="navigator-trigger"
@@ -27,7 +27,7 @@
       </svg>
     </button>
 
-    <!-- 浮层菜单 -->
+    <!-- Floating menu -->
     <Transition name="navigator-menu">
       <div v-if="isOpen" class="navigator-overlay" @click="closeMenu">
         <div class="navigator-menu" :style="menuStyle" @click.stop>
@@ -189,7 +189,7 @@ const isOpen = ref(false);
 const wrapperRef = ref<HTMLElement | null>(null);
 const triggerRef = ref<HTMLElement | null>(null);
 
-// Initialize floating drag
+// Initialize floating drag.
 const { positionStyle, isDragging, resetToDefault } = useFloatingDrag(triggerRef, wrapperRef, {
   clampMargin: CLAMP_MARGIN,
   clickThresholdMs: 150,
@@ -200,20 +200,20 @@ const { positionStyle, isDragging, resetToDefault } = useFloatingDrag(triggerRef
   }),
 });
 
-// Wrapper style with dynamic position
+// Wrapper style with dynamic positioning.
 const wrapperStyle = computed(() => ({
   left: positionStyle.value.left,
   top: positionStyle.value.top,
 }));
 
-// Menu position: prefer appearing above and to the left of the trigger
+// Menu position prefers appearing above and to the left of the trigger.
 const menuStyle = computed(() => {
-  // Menu appears in fixed position near the trigger
+  // The menu appears in a fixed position near the trigger.
   return {};
 });
 
 function handleTriggerClick() {
-  // Only toggle menu if not currently dragging
+  // Only toggle the menu when a drag is not in progress.
   if (!isDragging.value) {
     isOpen.value = !isOpen.value;
   }

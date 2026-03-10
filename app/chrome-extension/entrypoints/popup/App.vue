@@ -1,6 +1,6 @@
 <template>
   <div class="popup-container agent-theme" :data-agent-theme="agentTheme">
-    <!-- 首页 -->
+    <!-- Home -->
     <div v-show="currentView === 'home'" class="home-view">
       <div class="header">
         <div class="header-content">
@@ -8,7 +8,7 @@
         </div>
       </div>
       <div class="content">
-        <!-- 服务配置卡片 -->
+        <!-- Service configuration card -->
         <div class="section">
           <h2 class="section-title">{{ getMessage('nativeServerConfigLabel') }}</h2>
           <div class="config-card">
@@ -402,7 +402,7 @@ const filteredRrFlows = computed(() => {
   });
 });
 
-// Flow editor在独立窗口中打开；在popup不再展示繁杂列表
+// The flow editor opens in a standalone window; the popup no longer shows the full list.
 
 const loadFlows = async () => {
   try {
@@ -430,7 +430,7 @@ function isFlowBoundToCurrent(flow: any) {
   }
 }
 
-// 运行记录与覆盖项在侧边栏页面查看
+// Run history and overrides are available in the sidepanel view.
 const startRecording = async () => {
   // TODO: Record and replay is not implemented yet.
   showComingSoonToast('Record & Replay');
@@ -439,11 +439,11 @@ const startRecording = async () => {
   // try {
   //   const res = await chrome.runtime.sendMessage({
   //     type: BACKGROUND_MESSAGE_TYPES.RR_START_RECORDING,
-  //     meta: { name: '新录制' },
+  //     meta: { name: 'New recording' },
   //   });
   //   rrRecording.value = !!(res && res.success);
   // } catch (e) {
-  //   console.error('开始录制失败:', e);
+  //   console.error('Failed to start recording:', e);
   //   rrRecording.value = false;
   // }
 };
@@ -460,7 +460,7 @@ const stopRecording = async () => {
   //   rrRecording.value = false;
   //   if (res && res.success) await loadFlows();
   // } catch (e) {
-  //   console.error('停止录制失败:', e);
+  //   console.error('Failed to stop recording:', e);
   //   rrRecording.value = false;
   // }
 };
@@ -485,7 +485,7 @@ const runFlow = async (flowId: string) => {
       options: { ...runOptions, ...ov, returnLogs: true },
     });
     if (!(res && res.success)) {
-      console.warn('回放失败');
+      console.warn('Replay failed');
       return;
     }
     // If failed, open builder and focus the failed node
@@ -506,7 +506,7 @@ const runFlow = async (flowId: string) => {
       }
     } catch {}
   } catch (e) {
-    console.error('回放失败:', e);
+    console.error('Replay failed:', e);
   }
 };
 
@@ -659,7 +659,7 @@ async function toggleWebEditor() {
 
 async function toggleElementMarker() {
   try {
-    // 获取当前活动tab
+    // Get the current active tab
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) {
       console.warn('Unable to get current tab');
@@ -860,7 +860,7 @@ const saveSemanticEngineState = async () => {
     // eslint-disable-next-line no-undef
     await chrome.storage.local.set({ semanticEngineState });
   } catch (error) {
-    console.error('保存语义引擎状态失败:', error);
+    console.error('Failed to save semantic engine state:', error);
   }
 };
 
@@ -997,7 +997,7 @@ const checkNativeConnection = async () => {
     const response = await chrome.runtime.sendMessage({ type: 'ping_native' });
     nativeConnectionStatus.value = response?.connected ? 'connected' : 'disconnected';
   } catch (error) {
-    console.error('检测 Native 连接状态失败:', error);
+    console.error('Failed to check native connection status:', error);
     nativeConnectionStatus.value = 'disconnected';
   }
 };
@@ -1016,7 +1016,7 @@ const checkServerStatus = async () => {
       nativeConnectionStatus.value = response.connected ? 'connected' : 'disconnected';
     }
   } catch (error) {
-    console.error('检测服务器状态失败:', error);
+    console.error('Failed to check server status:', error);
   }
 };
 
@@ -1034,7 +1034,7 @@ const refreshServerStatus = async () => {
       nativeConnectionStatus.value = response.connected ? 'connected' : 'disconnected';
     }
   } catch (error) {
-    console.error('刷新服务器状态失败:', error);
+    console.error('Failed to refresh server status:', error);
   }
 };
 
@@ -1047,7 +1047,7 @@ const copyMcpConfig = async () => {
       copyButtonText.value = getMessage('copyConfigButton');
     }, 2000);
   } catch (error) {
-    console.error('复制配置失败:', error);
+    console.error('Failed to copy config:', error);
     copyButtonText.value = '❌' + getMessage('networkErrorMessage');
 
     setTimeout(() => {
@@ -1065,7 +1065,7 @@ const testNativeConnection = async () => {
       await chrome.runtime.sendMessage({ type: 'disconnect_native' });
       nativeConnectionStatus.value = 'disconnected';
     } else {
-      console.log(`尝试连接到端口: ${nativeServerPort.value}`);
+      console.log(`Trying to connect to port: ${nativeServerPort.value}`);
       // eslint-disable-next-line no-undef
       const response = await chrome.runtime.sendMessage({
         type: 'connectNative',
@@ -1073,15 +1073,15 @@ const testNativeConnection = async () => {
       });
       if (response && response.success) {
         nativeConnectionStatus.value = 'connected';
-        console.log('连接成功:', response);
+        console.log('Connected successfully:', response);
         await savePortPreference(nativeServerPort.value);
       } else {
         nativeConnectionStatus.value = 'disconnected';
-        console.error('连接失败:', response);
+        console.error('Connection failed:', response);
       }
     }
   } catch (error) {
-    console.error('测试连接失败:', error);
+    console.error('Connection test failed:', error);
     nativeConnectionStatus.value = 'disconnected';
   } finally {
     isConnecting.value = false;
@@ -1158,7 +1158,7 @@ const loadModelPreference = async () => {
       semanticEngineStatus.value = 'idle';
     }
   } catch (error) {
-    console.error('❌ 加载模型偏好失败:', error);
+    console.error('❌ Failed to load model preferences:', error);
   }
 };
 
@@ -1167,7 +1167,7 @@ const saveModelPreference = async (model: ModelPreset) => {
     // eslint-disable-next-line no-undef
     await chrome.storage.local.set({ selectedModel: model });
   } catch (error) {
-    console.error('保存模型偏好失败:', error);
+    console.error('Failed to save model preferences:', error);
   }
 };
 
@@ -1176,7 +1176,7 @@ const saveVersionPreference = async (version: 'full' | 'quantized' | 'compressed
     // eslint-disable-next-line no-undef
     await chrome.storage.local.set({ selectedVersion: version });
   } catch (error) {
-    console.error('保存版本偏好失败:', error);
+    console.error('Failed to save version preference:', error);
   }
 };
 
@@ -1184,9 +1184,9 @@ const savePortPreference = async (port: number) => {
   try {
     // eslint-disable-next-line no-undef
     await chrome.storage.local.set({ nativeServerPort: port });
-    console.log(`端口偏好已保存: ${port}`);
+    console.log(`Saved port preference: ${port}`);
   } catch (error) {
-    console.error('保存端口偏好失败:', error);
+    console.error('Failed to save port preference:', error);
   }
 };
 
@@ -1196,10 +1196,10 @@ const loadPortPreference = async () => {
     const result = await chrome.storage.local.get(['nativeServerPort']);
     if (result.nativeServerPort) {
       nativeServerPort.value = result.nativeServerPort;
-      console.log(`端口偏好已加载: ${result.nativeServerPort}`);
+      console.log(`Loaded port preference: ${result.nativeServerPort}`);
     }
   } catch (error) {
-    console.error('加载端口偏好失败:', error);
+    console.error('Failed to load port preference:', error);
   }
 };
 
@@ -1214,7 +1214,7 @@ const saveModelState = async () => {
     // eslint-disable-next-line no-undef
     await chrome.storage.local.set({ modelState });
   } catch (error) {
-    console.error('保存模型状态失败:', error);
+    console.error('Failed to save model state:', error);
   }
 };
 
@@ -1254,7 +1254,7 @@ const startModelStatusMonitoring = () => {
         }
       }
     } catch (error) {
-      console.error('获取模型状态失败:', error);
+      console.error('Failed to get model status:', error);
     }
   }, 1000);
 };
@@ -1440,7 +1440,7 @@ const switchModel = async (newModel: ModelPreset) => {
       currentModel.value = newModel;
       modelSwitchProgress.value = getMessage('successNotification');
       console.log(
-        '模型切换成功:',
+        'Model switch succeeded:',
         newModel,
         'version: quantized',
         'dimension:',
@@ -1458,13 +1458,13 @@ const switchModel = async (newModel: ModelPreset) => {
       throw new Error(response?.error || 'Model switch failed');
     }
   } catch (error: any) {
-    console.error('模型切换失败:', error);
+    console.error('Model switch failed:', error);
     modelSwitchProgress.value = `Model switch failed: ${error?.message || 'Unknown error'}`;
 
     modelInitializationStatus.value = 'error';
     isModelDownloading.value = false;
 
-    const errorMessage = error?.message || '未知错误';
+    const errorMessage = error?.message || 'Unknown error';
     if (
       errorMessage.includes('network') ||
       errorMessage.includes('fetch') ||
@@ -1513,7 +1513,7 @@ const setupServerStatusListener = () => {
 };
 
 onMounted(async () => {
-  // 初始化主题
+  // Initialize the theme
   await initTheme();
   await loadPortPreference();
   await loadModelPreference();
@@ -2359,7 +2359,7 @@ onUnmounted(() => {
   }
 }
 
-/* 快捷工具icon按钮样式 */
+/* Quick tool icon button styles */
 .rr-icon-buttons {
   display: flex;
   gap: 12px;
@@ -2399,7 +2399,7 @@ onUnmounted(() => {
   height: 24px;
 }
 
-/* 录制按钮 - 红色 */
+/* Record button - red */
 .rr-icon-btn-record {
   background: rgba(239, 68, 68, 0.1);
   color: #ef4444;
@@ -2410,7 +2410,7 @@ onUnmounted(() => {
   color: #dc2626;
 }
 
-/* 录制中状态 - 脉冲动画 */
+/* Recording state - pulse animation */
 .rr-icon-btn-recording {
   animation: pulse-recording 1.5s ease-in-out infinite;
 }
@@ -2425,7 +2425,7 @@ onUnmounted(() => {
   }
 }
 
-/* 停止按钮 - 深红色 */
+/* Stop button - dark red */
 .rr-icon-btn-stop {
   background: rgba(185, 28, 28, 0.1);
   color: #b91c1c;
@@ -2436,7 +2436,7 @@ onUnmounted(() => {
   color: #991b1b;
 }
 
-/* 编辑按钮 - 蓝色 */
+/* Edit button - blue */
 .rr-icon-btn-edit {
   background: rgba(37, 99, 235, 0.1);
   color: #2563eb;
@@ -2447,7 +2447,7 @@ onUnmounted(() => {
   color: #1d4ed8;
 }
 
-/* 标注按钮 - 绿色 */
+/* Annotate button - green */
 .rr-icon-btn-marker {
   background: rgba(16, 185, 129, 0.1);
   color: #10b981;
@@ -2458,7 +2458,7 @@ onUnmounted(() => {
   color: #059669;
 }
 
-/* Coming Soon 按钮样式 */
+/* Coming Soon button styles */
 .rr-icon-btn-coming-soon {
   opacity: 0.5;
   cursor: default !important;
@@ -2521,14 +2521,14 @@ onUnmounted(() => {
   visibility: visible;
 }
 
-/* 首页视图 */
+/* Home view */
 .home-view {
   display: flex;
   flex-direction: column;
   height: 100%;
 }
 
-/* 管理入口卡片样式 */
+/* Management entry card styles */
 .entry-card {
   background: var(--ac-surface, white);
   border-radius: var(--ac-radius-card, 12px);

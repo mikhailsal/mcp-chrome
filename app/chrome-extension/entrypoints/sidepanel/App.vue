@@ -458,7 +458,7 @@ function toggleRun(id: string) {
 async function run(id: string) {
   try {
     const result = await workflowsV3.runFlow(id);
-    if (!result) console.warn('回放失败');
+    if (!result) console.warn('Replay failed');
   } catch {}
 }
 

@@ -199,7 +199,7 @@ export function useAgentProjects(options: UseAgentProjectsOptions) {
       let allowCreate = false;
       if (validation.needsCreation) {
         const confirmed = confirm(
-          `目录 "${validation.absolute}" 不存在，是否创建？\n\nThe directory "${validation.absolute}" does not exist. Create it?`,
+          `The directory "${validation.absolute}" does not exist. Create it?`,
         );
         if (!confirmed) {
           return null;
@@ -425,9 +425,7 @@ export function useAgentProjects(options: UseAgentProjectsOptions) {
       if (existingProject) {
         // Project already exists - select it instead of creating a new one
         const shouldSwitch = confirm(
-          `目录 "${validation.absolute}" 已存在对应的项目：${existingProject.name}\n\n` +
-            `是否切换到该项目？\n\n` +
-            `A project already exists for "${validation.absolute}": ${existingProject.name}\n` +
+          `A project already exists for "${validation.absolute}": ${existingProject.name}\n\n` +
             `Switch to that project?`,
         );
         if (shouldSwitch) {
@@ -444,7 +442,7 @@ export function useAgentProjects(options: UseAgentProjectsOptions) {
       let allowCreate = false;
       if (validation.needsCreation) {
         const confirmed = confirm(
-          `目录 "${validation.absolute}" 不存在，是否创建？\n\nThe directory "${validation.absolute}" does not exist. Create it?`,
+          `The directory "${validation.absolute}" does not exist. Create it?`,
         );
         if (!confirmed) {
           return null;
@@ -452,7 +450,6 @@ export function useAgentProjects(options: UseAgentProjectsOptions) {
         allowCreate = true;
       }
 
-      // Create the project
       const url = `http://127.0.0.1:${serverPort}/agent/projects`;
       const response = await fetch(url, {
         method: 'POST',
@@ -469,13 +466,11 @@ export function useAgentProjects(options: UseAgentProjectsOptions) {
       const project = payload?.project as AgentProject | undefined;
 
       if (project?.id) {
-        // Update local state
         const others = projects.value.filter((p) => p.id !== project.id);
         projects.value = [...others, project];
         selectedProjectId.value = project.id;
         await saveSelectedProjectId();
         await loadChatHistory(project.id);
-
         return project;
       } else {
         projectError.value = 'Project created but response is invalid.';
@@ -488,7 +483,6 @@ export function useAgentProjects(options: UseAgentProjectsOptions) {
     }
   }
 
-  // Handle project change
   async function handleProjectChanged(): Promise<void> {
     await saveSelectedProjectId();
     if (selectedProjectId.value) {
@@ -496,7 +490,6 @@ export function useAgentProjects(options: UseAgentProjectsOptions) {
     }
   }
 
-  // Save project preference (CLI, model, useCcr, enableChromeMcp)
   async function saveProjectPreference(
     cli?: string,
     model?: string,
@@ -524,7 +517,6 @@ export function useAgentProjects(options: UseAgentProjectsOptions) {
         }),
       });
 
-      // Update local project state if successful
       if (response.ok) {
         const payload = await response.json();
         const updatedProject = payload?.project as AgentProject | undefined;

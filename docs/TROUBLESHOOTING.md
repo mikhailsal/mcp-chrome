@@ -125,3 +125,20 @@ This error means the stdio bridge cannot connect to the native HTTP server on po
    ```
 
 3. **If ping fails (connection refused)**, the extension hasn't started the native server. Open Chrome and ensure the MCP Chrome extension is enabled. Click the extension icon to trigger the native messaging connection.
+
+## Tool Execution Timeout
+
+If a tool starts correctly but times out before returning a result:
+
+1. Reconnect the extension and your MCP client before retrying the tool.
+2. Check whether the current page is unusually heavy, blocked by permissions, or waiting on a network response.
+3. Review the wrapper and IDE MCP logs for the last tool call to see whether the timeout happened in Chrome, the native host, or the client.
+4. Retry once after refreshing the target page if the tab state may be stale.
+
+## Output Quality and Agent Differences
+
+Different models and agent clients do not use browser tools with the same reliability or precision.
+
+1. If a workflow behaves inconsistently, try a different agent client before assuming the extension is broken.
+2. Prefer agents that handle structured tool calls well and can recover from partial tool results.
+3. If results are weak, simplify the prompt and ask the model for one browser action at a time instead of a large multi-step instruction.

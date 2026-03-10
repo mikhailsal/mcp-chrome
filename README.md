@@ -8,7 +8,7 @@
 
 > 🌟 **Turn your Chrome browser into your intelligent assistant** - Let AI take control of your browser, transforming it into a powerful AI-controlled automation tool.
 
-**📖 Documentation**: [English](README.md) | [中文](README_zh.md)
+**📖 Documentation**: [README](README.md) | [Architecture](docs/ARCHITECTURE.md) | [Tools](docs/TOOLS.md) | [Troubleshooting](docs/TROUBLESHOOTING.md) | [Windows Install](docs/WINDOWS_INSTALL.md)
 
 > The project is still in its early stages and is under intensive development. More features, stability improvements, and other enhancements will follow.
 
@@ -138,9 +138,9 @@ Then your final path would be: /Users/xxx/Library/pnpm/global/5/node_modules/mcp
 }
 ```
 
-eg：config in augment:
+Example: configuration in Augment:
 
-<img width="494" alt="截屏2025-06-22 22 11 25" src="https://github.com/user-attachments/assets/48eefc0c-a257-4d3b-8bbe-d7ff716de2bf" />
+<img width="494" alt="Augment MCP configuration example" src="https://github.com/user-attachments/assets/48eefc0c-a257-4d3b-8bbe-d7ff716de2bf" />
 
 ## 🛠️ Available Tools
 
@@ -303,3 +303,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [Architecture Design](docs/ARCHITECTURE.md) - Detailed technical architecture documentation
 - [TOOLS API](docs/TOOLS.md) - Complete tool API documentation
 - [Troubleshooting](docs/TROUBLESHOOTING.md) - Common issue solutions
+- [Windows Installation](docs/WINDOWS_INSTALL.md) - Windows-specific installation and troubleshooting
+- [Issue Overview](docs/ISSUE.md) - English summary of common issue categories and trends

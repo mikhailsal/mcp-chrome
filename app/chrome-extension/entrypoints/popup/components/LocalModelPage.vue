@@ -181,7 +181,7 @@
         </button>
       </div>
 
-      <!-- 模型缓存管理 -->
+      <!-- Model cache management -->
       <ModelCacheManagement
         :cache-stats="cacheStats"
         :is-managing-cache="isManagingCache"
@@ -208,12 +208,12 @@ import {
 } from './icons';
 
 interface Props {
-  // 语义引擎
+  // Semantic engine
   semanticEngineStatus: 'idle' | 'initializing' | 'ready' | 'error';
   isSemanticEngineInitializing: boolean;
   semanticEngineInitProgress: string;
   semanticEngineLastUpdated: number | null;
-  // 模型
+  // Models
   availableModels: Array<{
     preset: string;
     performance: string;
@@ -227,7 +227,7 @@ interface Props {
   modelInitializationStatus: string;
   modelErrorMessage: string;
   modelErrorType: string;
-  // 存储统计
+  // Storage statistics
   storageStats: {
     indexedPages: number;
     totalDocuments: number;
@@ -237,7 +237,7 @@ interface Props {
   } | null;
   isClearingData: boolean;
   clearDataProgress: string;
-  // 缓存
+  // Cache
   cacheStats: any;
   isManagingCache: boolean;
 }
@@ -254,7 +254,7 @@ defineEmits<{
   (e: 'clearAllCache'): void;
 }>();
 
-// 计算属性
+// Computed properties
 const getSemanticEngineStatusClass = () => {
   switch (props.semanticEngineStatus) {
     case 'ready':
@@ -513,7 +513,7 @@ const formatIndexSize = () => {
   cursor: not-allowed;
 }
 
-/* 模型列表 */
+/* Model list */
 .model-list {
   display: flex;
   flex-direction: column;
@@ -612,7 +612,7 @@ const formatIndexSize = () => {
   color: var(--ac-text-muted, #4b5563);
 }
 
-/* 统计网格 */
+/* Statistics grid */
 .stats-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -669,7 +669,7 @@ const formatIndexSize = () => {
   margin: 0;
 }
 
-/* 错误卡片 */
+/* Error card */
 .error-card {
   background: #fef2f2;
   border: 1px solid #fecaca;

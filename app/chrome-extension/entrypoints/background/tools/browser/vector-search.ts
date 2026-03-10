@@ -203,9 +203,9 @@ class VectorSearchTabsContentTool extends BaseBrowserToolExecutor {
       truncated.lastIndexOf('.'),
       truncated.lastIndexOf('!'),
       truncated.lastIndexOf('?'),
-      truncated.lastIndexOf('。'),
-      truncated.lastIndexOf('！'),
-      truncated.lastIndexOf('？'),
+      truncated.lastIndexOf('\u3002'),
+      truncated.lastIndexOf('\uff01'),
+      truncated.lastIndexOf('\uff1f'),
     );
 
     if (lastSentenceEnd > maxLength * 0.7) {

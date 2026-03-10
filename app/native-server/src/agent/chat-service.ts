@@ -30,8 +30,9 @@ export interface AgentChatServiceOptions {
 /**
  * AgentChatService coordinates incoming /agent/chat requests and delegates to engines.
  *
- * 中文说明：该服务负责会话级调度，不关心具体 CLI/SDK 实现细节。
- * 通过 Engine 接口实现依赖倒置，后续替换或新增引擎时无需修改 HTTP 路由层。
+ * The service handles session-level orchestration without depending on specific
+ * CLI or SDK details. By targeting the Engine interface, the HTTP routing layer
+ * can add or swap engines without changes.
  */
 export class AgentChatService {
   private readonly engines = new Map<EngineName, AgentEngine>();

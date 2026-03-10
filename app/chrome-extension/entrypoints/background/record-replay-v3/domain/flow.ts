@@ -1,6 +1,6 @@
 /**
- * @fileoverview Flow 类型定义
- * @description 定义 Record-Replay V3 中的 Flow IR（中间表示）
+ * @fileoverview Flow type definitions.
+ * @description Defines the Flow IR used by Record-Replay V3.
  */
 
 import type { ISODateTimeString, JsonObject } from './json';
@@ -8,51 +8,51 @@ import type { EdgeId, EdgeLabel, FlowId, NodeId } from './ids';
 import type { FlowPolicy, NodePolicy } from './policy';
 import type { VariableDefinition } from './variables';
 
-/** Flow Schema 版本 */
+/** Flow schema version. */
 export const FLOW_SCHEMA_VERSION = 3 as const;
 
 /**
- * Edge V3
- * @description DAG 中的边，连接两个节点
+ * Edge V3.
+ * @description Edge in the DAG connecting two nodes.
  */
 export interface EdgeV3 {
-  /** Edge 唯一标识符 */
+  /** Unique edge identifier. */
   id: EdgeId;
-  /** 源节点 ID */
+  /** Source node ID. */
   from: NodeId;
-  /** 目标节点 ID */
+  /** Target node ID. */
   to: NodeId;
-  /** 边标签（用于条件分支和错误处理） */
+  /** Edge label for branching and error handling. */
   label?: EdgeLabel;
 }
 
-/** 节点类型（可扩展） */
+/** Extensible node kind. */
 export type NodeKind = string;
 
 /**
- * Node V3
- * @description DAG 中的节点，代表一个可执行的操作
+ * Node V3.
+ * @description Node in the DAG representing an executable operation.
  */
 export interface NodeV3 {
-  /** Node 唯一标识符 */
+  /** Unique node identifier. */
   id: NodeId;
-  /** 节点类型 */
+  /** Node kind. */
   kind: NodeKind;
-  /** 节点名称（用于显示） */
+  /** Display name for the node. */
   name?: string;
-  /** 是否禁用 */
+  /** Whether the node is disabled. */
   disabled?: boolean;
-  /** 节点级策略 */
+  /** Node-level policy. */
   policy?: NodePolicy;
-  /** 节点配置（类型由 kind 决定） */
+  /** Node config, whose shape depends on kind. */
   config: JsonObject;
-  /** UI 布局信息 */
+  /** UI layout metadata. */
   ui?: { x: number; y: number };
 }
 
 /**
- * Flow 元数据绑定
- * @description 定义 Flow 与特定域名/路径/URL 的关联
+ * Flow metadata binding.
+ * @description Defines how a flow is associated with a domain, path, or URL.
  */
 export interface FlowBinding {
   kind: 'domain' | 'path' | 'url';
@@ -60,59 +60,59 @@ export interface FlowBinding {
 }
 
 /**
- * Flow V3
- * @description 完整的 Flow 定义，包含节点、边和配置
+ * Flow V3.
+ * @description Complete flow definition including nodes, edges, and config.
  */
 export interface FlowV3 {
-  /** Schema 版本 */
+  /** Schema version. */
   schemaVersion: typeof FLOW_SCHEMA_VERSION;
-  /** Flow 唯一标识符 */
+  /** Unique flow identifier. */
   id: FlowId;
-  /** Flow 名称 */
+  /** Flow name. */
   name: string;
-  /** Flow 描述 */
+  /** Flow description. */
   description?: string;
-  /** 创建时间 */
+  /** Creation time. */
   createdAt: ISODateTimeString;
-  /** 更新时间 */
+  /** Last updated time. */
   updatedAt: ISODateTimeString;
 
-  /** 入口节点 ID（显式指定，不依赖入度推断） */
+  /** Entry node ID, explicitly set instead of inferred from indegree. */
   entryNodeId: NodeId;
-  /** 节点列表 */
+  /** Node list. */
   nodes: NodeV3[];
-  /** 边列表 */
+  /** Edge list. */
   edges: EdgeV3[];
 
-  /** 变量定义 */
+  /** Variable definitions. */
   variables?: VariableDefinition[];
-  /** Flow 级策略 */
+  /** Flow-level policy. */
   policy?: FlowPolicy;
-  /** 元数据 */
+  /** Metadata. */
   meta?: {
-    /** 标签 */
+    /** Tags. */
     tags?: string[];
-    /** 绑定规则 */
+    /** Binding rules. */
     bindings?: FlowBinding[];
   };
 }
 
 /**
- * 根据 ID 查找节点
+ * Find a node by ID.
  */
 export function findNodeById(flow: FlowV3, nodeId: NodeId): NodeV3 | undefined {
   return flow.nodes.find((n) => n.id === nodeId);
 }
 
 /**
- * 查找从指定节点出发的所有边
+ * Find all edges originating from a node.
  */
 export function findEdgesFrom(flow: FlowV3, nodeId: NodeId): EdgeV3[] {
   return flow.edges.filter((e) => e.from === nodeId);
 }
 
 /**
- * 查找指向指定节点的所有边
+ * Find all edges targeting a node.
  */
 export function findEdgesTo(flow: FlowV3, nodeId: NodeId): EdgeV3[] {
   return flow.edges.filter((e) => e.to === nodeId);
