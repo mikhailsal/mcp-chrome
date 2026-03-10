@@ -18,14 +18,23 @@ import * as path from 'path';
 let stdioMcpServer: Server | null = null;
 let mcpClient: Client | null = null;
 
+const log = (level: string, ...args: unknown[]) => {
+  const ts = new Date().toISOString();
+  process.stderr.write(
+    `[${ts}] [stdio-bridge] [${level}] ${args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ')}\n`,
+  );
+};
+
 // Read configuration from stdio-config.json
 const loadConfig = () => {
   try {
     const configPath = path.join(__dirname, 'stdio-config.json');
     const configData = fs.readFileSync(configPath, 'utf8');
-    return JSON.parse(configData);
+    const config = JSON.parse(configData);
+    log('info', 'Loaded config:', config);
+    return config;
   } catch (error) {
-    console.error('Failed to load stdio-config.json:', error);
+    log('error', 'Failed to load stdio-config.json:', String(error));
     throw new Error('Configuration file stdio-config.json not found or invalid');
   }
 };
@@ -55,21 +64,25 @@ export const getStdioMcpServer = () => {
 export const ensureMcpClient = async () => {
   try {
     if (mcpClient) {
+      log('info', 'Pinging existing MCP client...');
       const pingResult = await mcpClient.ping();
       if (pingResult) {
+        log('info', 'Existing client alive');
         return mcpClient;
       }
     }
 
     const config = loadConfig();
+    log('info', `Connecting to backend: ${config.url}`);
     mcpClient = new Client({ name: 'Mcp Chrome Proxy', version: '1.0.0' }, { capabilities: {} });
     const transport = new StreamableHTTPClientTransport(new URL(config.url), {});
     await mcpClient.connect(transport);
+    log('info', 'Connected to backend successfully');
     return mcpClient;
-  } catch (error) {
+  } catch (error: any) {
     mcpClient?.close();
     mcpClient = null;
-    console.error('Failed to connect to MCP server:', error);
+    log('error', `Failed to connect to MCP server: ${error?.message || String(error)}`);
   }
 };
 
@@ -91,6 +104,7 @@ export const setupTools = (server: Server) => {
 
 const handleToolCall = async (name: string, args: any): Promise<CallToolResult> => {
   try {
+    log('info', `Tool call: ${name}`, args);
     const client = await ensureMcpClient();
     if (!client) {
       throw new Error('Failed to connect to MCP server');
@@ -100,8 +114,10 @@ const handleToolCall = async (name: string, args: any): Promise<CallToolResult> 
     const result = await client.callTool({ name, arguments: args }, undefined, {
       timeout: DEFAULT_CALL_TIMEOUT_MS,
     });
+    log('info', `Tool call ${name} completed, isError=${(result as any).isError}`);
     return result as CallToolResult;
   } catch (error: any) {
+    log('error', `Tool call ${name} failed: ${error.message}`);
     return {
       content: [
         {
@@ -115,11 +131,13 @@ const handleToolCall = async (name: string, args: any): Promise<CallToolResult> 
 };
 
 async function main() {
+  log('info', 'Starting stdio MCP bridge...');
   const transport = new StdioServerTransport();
   await getStdioMcpServer().connect(transport);
+  log('info', 'Stdio transport connected, bridge ready');
 }
 
 main().catch((error) => {
-  console.error('Fatal error Chrome MCP Server main():', error);
+  log('error', `Fatal error Chrome MCP Server main(): ${error?.message || String(error)}`);
   process.exit(1);
 });

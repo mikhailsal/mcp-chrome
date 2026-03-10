@@ -93,3 +93,35 @@ Wrapper logs are now stored in user-writable locations:
 - **macOS**: `~/Library/Logs/mcp-chrome-bridge/`
 - **Windows**: `%LOCALAPPDATA%\mcp-chrome-bridge\logs\`
 - **Linux**: `~/.local/state/mcp-chrome-bridge/logs/`
+
+The stdio bridge (the component that VS Code / Cursor spawns) also writes diagnostic logs to **stderr** with timestamps:
+
+```
+[2026-03-10T00:24:32.401Z] [stdio-bridge] [info] Tool call: chrome_screenshot {"storeBase64":true}
+[2026-03-10T00:24:32.403Z] [stdio-bridge] [info] Connecting to backend: http://127.0.0.1:12306/mcp
+[2026-03-10T00:24:32.492Z] [stdio-bridge] [info] Connected to backend successfully
+```
+
+These are visible in the MCP output panel of your IDE (VS Code: "Output" → select your MCP server).
+
+## "Error calling tool: Failed to connect to MCP server"
+
+This error means the stdio bridge cannot connect to the native HTTP server on port 12306.
+
+1. **Check if the native server is running:**
+
+   ```bash
+   curl -s http://127.0.0.1:12306/ping
+   # Should return: {"status":"ok","message":"pong"}
+   ```
+
+2. **If ping responds but tools fail**, the MCP endpoint may be stuck. Kill and let Chrome restart it:
+
+   ```bash
+   # Find the process
+   lsof -i :12306
+   # Kill it (Chrome will auto-restart it via native messaging)
+   kill <PID>
+   ```
+
+3. **If ping fails (connection refused)**, the extension hasn't started the native server. Open Chrome and ensure the MCP Chrome extension is enabled. Click the extension icon to trigger the native messaging connection.
