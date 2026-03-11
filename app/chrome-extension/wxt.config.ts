@@ -144,8 +144,8 @@ export default defineConfig({
             dest: 'workers',
           },
           {
-            src: '_locales/**/*',
-            dest: '_locales',
+            src: '_locales',
+            dest: '.',
           },
         ],
         // Use writeBundle so outDir exists for dev and prod
