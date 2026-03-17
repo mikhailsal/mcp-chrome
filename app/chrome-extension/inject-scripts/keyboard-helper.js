@@ -281,6 +281,37 @@ if (window.__KEYBOARD_HELPER_INITIALIZED__) {
           });
         });
       return true; // Indicates async response is expected
+    } else if (request.action === 'focusTarget') {
+      const targetEl = request.selector ? document.querySelector(request.selector) : null;
+      if (!targetEl) {
+        sendResponse({
+          success: false,
+          error: `Element with selector "${request.selector}" not found`,
+        });
+        return false;
+      }
+
+      try {
+        if (typeof targetEl.focus === 'function') {
+          targetEl.focus();
+        }
+
+        sendResponse({
+          success: true,
+          targetElement: {
+            tagName: targetEl.tagName,
+            id: targetEl.id,
+            className: targetEl.className,
+            type: targetEl.type,
+          },
+        });
+      } catch (error) {
+        sendResponse({
+          success: false,
+          error: `Failed to focus selector "${request.selector}": ${error.message}`,
+        });
+      }
+      return false;
     } else if (request.action === 'chrome_keyboard_ping') {
       sendResponse({ status: 'pong', initialized: true }); // Respond that it's initialized
       return false; // Synchronous response

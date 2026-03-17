@@ -11,29 +11,44 @@
 
 | Severity  | Count  |
 | --------- | ------ |
-| Critical  | 3      |
+| Critical  | 1      |
 | High      | 14     |
 | Medium    | 18     |
 | Low       | 16     |
-| **Total** | **51** |
+| **Total** | **49** |
 
 ---
 
 ## Critical
 
-### BUG-01 · `chrome_keyboard` — Documented example silently fails
+### BUG-01 · `chrome_keyboard` — Documented example silently fails · ✅ **FIXED**
 
 **Tool:** `chrome_keyboard`  
-**Description:** The tool description lists `"Hello World"` as an explicit usage example (`keys="Hello World"`), but sending any plain text string fails with `"Invalid key string or combination."` — the documented example directly contradicts the implementation. Text input is not supported via `keys`; only key names and combos work.  
-**Steps to reproduce:**
+**Description:** The tool description lists `"Hello World"` as an explicit usage example (`keys="Hello World"`), but sending any plain text string fails with `"Invalid key string or combination."` — the documented example directly contradicted the implementation.  
+**Status:** **RESOLVED** (2026-03-18)  
+**Root Cause:** The underlying keyboard helper only accepted named keys (Enter, Tab) or key combinations (Ctrl+C). Plain text strings were rejected by `parseSingleKeyCombination()` validation in [keyboard-helper.js](keyboard-helper.js#L142).
 
-```json
-{ "keys": "Hello", "tabId": 187425763 }
-```
+**Solution Implemented:**
 
-**Expected:** Characters typed into the focused element (as shown in the description).  
-**Actual:** `"Invalid key string or combination."`  
-**Suggested fix:** Either implement text-input support (press each character key), or remove the text example from the description and clearly state only key names are supported (e.g., `"Enter"`, `"Ctrl+C"`).
+- Added explicit `inputMode` parameter (`'auto'` | `'keys'` | `'text'`) to disambiguate text vs key presses
+- Implemented auto-detection heuristic: if a string doesn't parse as key combination syntax, route to text mode
+- Text input now uses Chrome DevTools Protocol `Input.insertText` (native browser text insertion) instead of DOM key event emulation
+- Preserved keyword path for actual key combinations (Enter, Shift+Tab, etc.)
+
+**Files Modified:**
+
+- [keyboard.ts](keyboard.ts) — Added `resolveInputMode()` auto-detection function (lines 93–104), text-mode CDP routing (lines 195–250), focusTarget selector handler
+- [keyboard-helper.js](keyboard-helper.js) — Added focusTarget message handler (line 284) to focus elements by CSS selector before CDP insertion
+- [tools.ts](tools.ts) — Added inputMode enum ['auto', 'keys', 'text'] to schema (lines 1042–1048), updated description
+- [TOOLS.md](TOOLS.md) — Updated chrome_keyboard section with text input documentation (lines 445–465)
+- [keyboard.tool.test.ts](keyboard.tool.test.ts) — 4 regression tests validating auto/manual mode detection and routing
+
+**Live Verification (2026-03-18):** Confirmed on real Chrome form (httpbin.org/forms/post) via MCP HTTP endpoint:
+
+- ✅ Text input "Hello World" successfully typed into `input[name="custname"]` via CDP
+- ✅ Ambiguous literal "control" forced to text with `inputMode: 'text'` (not interpreted as Ctrl modifier)
+- ✅ Focused-element path works without selector targeting
+- ✅ Auto-detection correctly routes multi-char strings to text mode, single keys to keyboard-event path
 
 ---
 
@@ -53,19 +68,19 @@
 
 ---
 
-### BUG-03 · `chrome_keyboard` — No text-input capability despite being a "keyboard" tool
+### BUG-03 · `chrome_keyboard` — No text-input capability despite being a "keyboard" tool · ✅ **FIXED**
 
 **Tool:** `chrome_keyboard`  
-**Description:** Despite being named "keyboard" and described as supporting "text input", the tool only dispatches named key events. Typing actual textual content (as users would expect from a keyboard tool) is entirely unsupported. The correct workaround (`chrome_computer type`) is not mentioned.  
-**Steps to reproduce:**
+**Description:** Despite being named "keyboard" and described as supporting "text input", the tool only dispatched named key events. Typing actual textual content was entirely unsupported.  
+**Status:** **RESOLVED** (2026-03-18)  
+**Solution:** Same as BUG-01 — full text input support now implemented via the new `inputMode` parameter and auto-detection logic. Callers can now type arbitrary email addresses, form values, and multi-word text directly via `chrome_keyboard` without needing `chrome_computer action=type` as a workaround.
 
-```json
-{ "keys": "TestUser@example.com", "tabId": 187425763 }
-```
+**Live Verification (2026-03-18):** Successfully typed email address formats into form fields:
 
-**Expected:** Characters typed into the focused field.  
-**Actual:** `"Invalid key string or combination."`  
-**Suggested fix:** Add cross-reference to `chrome_computer action=type` in the description.
+- ✅ "Hello World" (multi-word plain text) — supported
+- ✅ "TestUser@example.com" (email format) — supported
+- ✅ "focused@example.com" (targeted to focused field) — supported
+- ✅ Form automation now supports direct text entry as a primary feature, not a workaround
 
 ---
 

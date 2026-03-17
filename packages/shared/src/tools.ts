@@ -1030,14 +1030,20 @@ export const TOOL_SCHEMAS: Tool[] = [
   {
     name: TOOL_NAMES.BROWSER.KEYBOARD,
     description:
-      'Simulate keyboard input on a web page. Supports single keys (Enter, Tab, Escape), key combinations (Ctrl+C, Ctrl+V), and text input. Can target a specific element or send to the focused element.',
+      'Simulate keyboard input on a web page. Supports single keys (Enter, Tab, Escape), key combinations (Ctrl+C, Ctrl+V), and literal text input. Auto-detects ordinary text vs key sequences; use inputMode to force text for ambiguous literals like "control" or to force combo handling.',
     inputSchema: {
       type: 'object',
       properties: {
         keys: {
           type: 'string',
           description:
-            'Keys or key combinations to simulate. Examples: "Enter", "Tab", "Ctrl+C", "Shift+Tab", "Hello World".',
+            'Keys or text to simulate. Examples: "Enter", "Tab", "Ctrl+C", "Shift+Tab", "Hello World". Ambiguous literals like "control" can be forced to text with inputMode="text".',
+        },
+        inputMode: {
+          type: 'string',
+          enum: ['auto', 'keys', 'text'],
+          description:
+            'How to interpret the keys string. "auto" (default) infers text vs key presses, "keys" forces key/chord handling, and "text" forces literal text input.',
         },
         selector: {
           type: 'string',

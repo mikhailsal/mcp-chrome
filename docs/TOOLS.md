@@ -444,11 +444,12 @@ Provide `ref` or `selector` to identify the element.
 
 ### `chrome_keyboard`
 
-Simulate keyboard input and shortcuts.
+Simulate keyboard input, shortcuts, and literal text typing.
 
 **Parameters**:
 
-- `keys` (string, required): Key combination (e.g., "Ctrl+C", "Enter")
+- `keys` (string, required): Keys or text to send (e.g., "Ctrl+C", "Enter", "Hello World")
+- `inputMode` (string, optional): `auto`, `keys`, or `text`. Use `text` for ambiguous literals like `control`.
 - `selector` (string, optional): Target element selector
 - `delay` (number, optional): Delay between keystrokes in ms (default: 0)
 
@@ -456,7 +457,8 @@ Simulate keyboard input and shortcuts.
 
 ```json
 {
-  "keys": "Ctrl+A",
+  "keys": "Hello World",
+  "inputMode": "text",
   "selector": "#text-input",
   "delay": 100
 }
