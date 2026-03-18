@@ -277,35 +277,75 @@
 
 ## Medium
 
-### BUG-17 · `chrome_navigate` — Response `url` field is stale (pre-navigation URL)
+### BUG-17 · `chrome_navigate` — Response `url` field is stale (pre-navigation URL) · ✅ **FIXED**
 
 **Tool:** `chrome_navigate`  
 **Description:** The `url` field in the navigation response shows the _old_ URL (before navigation), not the URL the tab was navigated to. The response gives a false sense of where the tab ended up.  
-**Steps to reproduce:**
+**Status:** **RESOLVED** (2026-03-18)  
+**Root Cause:** After `chrome.tabs.update(tabId, { url })`, the code immediately called `chrome.tabs.get(tabId)` to read back the tab URL. Because `chrome.tabs.update` starts navigation asynchronously, `chrome.tabs.get` returned the tab with its pre-navigation URL — the value the browser had before the update fired.
 
-```json
-{ "url": "https://httpbin.org/forms/post", "tabId": 187425763 }
-```
+**Solution Implemented:**
 
-**Expected:** `{ "url": "https://httpbin.org/forms/post" }`  
-**Actual:** `{ "url": "https://the-internet.herokuapp.com/upload" }` (previous URL)  
-**Suggested fix:** Resolve final URL after navigation completes, not before.
+- Removed the `chrome.tabs.get` call after `chrome.tabs.update` in the explicit-tabId navigation branch
+- Return the caller-supplied `url` parameter directly in the response instead of reading it back from the browser
+- Apply the same fix to `triggerAutoCapture` (pass `url` instead of the stale tab URL)
+
+**Files Modified:**
+
+- [common.ts](app/chrome-extension/entrypoints/background/tools/browser/common.ts) — Removed stale `chrome.tabs.get` call; return `url` (requested) instead of `updatedTab.url`
+
+**Live Verification (2026-03-18):**
+
+- ✅ Tab at `https://httpbin.org/get` + explicit `tabId` → navigate to `https://httpbin.org/forms/post` → response `url` is `"https://httpbin.org/forms/post"` (not stale)
+- ✅ Previous URL (`/get`) is gone from the response; only the navigated-to URL appears
 
 ---
 
-### BUG-18 · `chrome_navigate` — New tab navigation returns empty URL
+### BUG-18 · `chrome_navigate` — New tab navigation returns empty URL · ✅ **FIXED**
 
 **Tool:** `chrome_navigate`  
-**Description:** When `newTab:true` (or navigating to a new context), the response `url` field is an empty string `""`.  
-**Suggested fix:** Wait for `tabs.onUpdated` with `status:"complete"` before building response; use the final URL.
+**Description:** When navigating to a new context (new tab or new window), the response `url` field is an empty string `""`.  
+**Status:** **RESOLVED** (2026-03-18)  
+**Root Cause:** `chrome.tabs.create({ url })` and `chrome.windows.create({ url })` return objects whose `.url` property may be empty or `undefined` before the browser has started loading the page. The code was reading `newTab.url` / `tab.url` from these not-yet-loaded objects.
+
+**Solution Implemented:**
+
+- In all three new-context paths (new tab in existing window, new window, fallback new window), return the caller-supplied `url` parameter directly instead of reading `.url` from the created tab/window object
+- Apply the same fix to `triggerAutoCapture` calls in these paths
+
+**Files Modified:**
+
+- [common.ts](app/chrome-extension/entrypoints/background/tools/browser/common.ts) — Replaced `newTab.url` / `tab.url` with `url` in all three new-context response payloads
+
+**Live Verification (2026-03-18):**
+
+- ✅ Navigate to `https://httpbin.org/get` (not previously open) → response `url` is `"https://httpbin.org/get"` (was `""`)
+- ✅ Navigate with `width`/`height` to create new window → `tabs[0].url` is the requested URL (not empty)
 
 ---
 
-### BUG-19 · `chrome_navigate width/height` — Doesn't create new window; activates existing tab
+### BUG-19 · `chrome_navigate width/height` — Doesn't create new window; activates existing tab · ✅ **FIXED**
 
 **Tool:** `chrome_navigate`  
 **Description:** Passing `width` and `height` parameters is documented as creating a new window. Instead, the tool activates an existing matching tab (same URL) without creating a new window. The window dimensions have no effect.  
-**Suggested fix:** Fix the window-creation logic; when `width`/`height` are supplied, always create a new window.
+**Status:** **RESOLVED** (2026-03-18)  
+**Root Cause:** The "activate existing tab if URL already open" check ran unconditionally before the `openInNewWindow` flag was evaluated. When an existing tab was found, the function returned early (activating that tab) and never reached the new-window creation logic — even if `width` or `height` was explicitly supplied.
+
+**Solution Implemented:**
+
+- Moved `const openInNewWindow = newWindow || typeof width === 'number' || typeof height === 'number'` to execute **before** the existing-tab search
+- Changed existing-tab lookup to `openInNewWindow ? undefined : pickBestMatch(url, candidateTabs)` — skips the existing-tab check entirely when a new window was explicitly requested
+- Removed the now-duplicate `const openInNewWindow = ...` declaration that was previously inside section 3
+
+**Files Modified:**
+
+- [common.ts](app/chrome-extension/entrypoints/background/tools/browser/common.ts) — Hoisted `openInNewWindow` declaration; conditionally skip existing-tab activation
+
+**Live Verification (2026-03-18):**
+
+- ✅ `example.com` open in Tab A → `chrome_navigate({ url: "https://example.com", width: 800, height: 600 })` → new window created (new `windowId`, new `tabId`)
+- ✅ Response message is `"Opened URL in new window"` not `"Activated existing tab"`
+- ✅ No-width/height navigate to same URL still activates existing tab as expected
 
 ---
 

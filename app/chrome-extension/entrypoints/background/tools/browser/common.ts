@@ -152,8 +152,9 @@ class NavigateTool extends BaseBrowserToolExecutor {
           activate: background !== true,
           focusWindow: background !== true,
         });
-        const updatedTab = await chrome.tabs.get(explicitTab.id);
-        await this.triggerAutoCapture(updatedTab.id!, updatedTab.url);
+        // Use the requested URL directly — chrome.tabs.get immediately after update
+        // returns the pre-navigation (stale) URL because navigation hasn't completed (BUG-17).
+        await this.triggerAutoCapture(explicitTab.id, url);
         return {
           content: [
             {
@@ -161,9 +162,9 @@ class NavigateTool extends BaseBrowserToolExecutor {
               text: JSON.stringify({
                 success: true,
                 message: 'Navigated tab to URL',
-                tabId: updatedTab.id,
-                windowId: updatedTab.windowId,
-                url: updatedTab.url,
+                tabId: explicitTab.id,
+                windowId: explicitTab.windowId,
+                url: url,
               }),
             },
           ],
@@ -282,8 +283,11 @@ class NavigateTool extends BaseBrowserToolExecutor {
         return best.tab;
       };
 
-      // When no tabId is provided, activate any existing tab that already has the URL
-      const existingTab = pickBestMatch(url, candidateTabs);
+      // When no tabId is provided and no new window is requested, activate any existing
+      // tab that already has the URL. When width/height/newWindow is specified, always
+      // open a new window even if the URL is already open (BUG-19 fix).
+      const openInNewWindow = newWindow || typeof width === 'number' || typeof height === 'number';
+      const existingTab = openInNewWindow ? undefined : pickBestMatch(url, candidateTabs);
       if (existingTab?.id !== undefined) {
         console.log(
           `URL already open in Tab ID: ${existingTab.id}, Window ID: ${existingTab.windowId}`,
@@ -318,9 +322,7 @@ class NavigateTool extends BaseBrowserToolExecutor {
         };
       }
 
-      // 3. URL is not already open: decide how to open it based on options
-      const openInNewWindow = newWindow || typeof width === 'number' || typeof height === 'number';
-
+      // 3. URL is not already open (or new window explicitly requested via width/height/newWindow):
       if (openInNewWindow) {
         console.log('Opening URL in a new window.');
 
@@ -338,7 +340,7 @@ class NavigateTool extends BaseBrowserToolExecutor {
           // Trigger auto-capture if the new window has a tab
           const firstTab = newWindow.tabs?.[0];
           if (firstTab?.id) {
-            await this.triggerAutoCapture(firstTab.id, firstTab.url);
+            await this.triggerAutoCapture(firstTab.id, url);
           }
 
           return {
@@ -352,7 +354,7 @@ class NavigateTool extends BaseBrowserToolExecutor {
                   tabs: newWindow.tabs
                     ? newWindow.tabs.map((tab) => ({
                         tabId: tab.id,
-                        url: tab.url,
+                        url: url, // Use requested URL; tab.url may be empty before load (BUG-18)
                       }))
                     : [],
                 }),
@@ -390,7 +392,7 @@ class NavigateTool extends BaseBrowserToolExecutor {
 
           // Trigger auto-capture on new tab
           if (newTab.id) {
-            await this.triggerAutoCapture(newTab.id, newTab.url);
+            await this.triggerAutoCapture(newTab.id, url);
           }
 
           return {
@@ -402,7 +404,7 @@ class NavigateTool extends BaseBrowserToolExecutor {
                   message: 'Opened URL in new tab in existing window',
                   tabId: newTab.id,
                   windowId: targetWindow.id,
-                  url: newTab.url,
+                  url: url, // Use requested URL; newTab.url may be empty before load (BUG-18)
                 }),
               },
             ],
@@ -426,7 +428,7 @@ class NavigateTool extends BaseBrowserToolExecutor {
             // Trigger auto-capture if fallback window has a tab
             const firstTab = fallbackWindow.tabs?.[0];
             if (firstTab?.id) {
-              await this.triggerAutoCapture(firstTab.id, firstTab.url);
+              await this.triggerAutoCapture(firstTab.id, url);
             }
 
             return {
@@ -440,7 +442,7 @@ class NavigateTool extends BaseBrowserToolExecutor {
                     tabs: fallbackWindow.tabs
                       ? fallbackWindow.tabs.map((tab) => ({
                           tabId: tab.id,
-                          url: tab.url,
+                          url: url, // Use requested URL; tab.url may be empty before load (BUG-18)
                         }))
                       : [],
                   }),
