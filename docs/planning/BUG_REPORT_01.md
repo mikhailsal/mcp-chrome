@@ -110,19 +110,30 @@
 
 ---
 
-### BUG-06 · `chrome_navigate` — Wrong tab gets navigated when tabId is specified
+### BUG-06 · `chrome_navigate` — Wrong tab gets navigated when tabId is specified · ✅ **FIXED**
 
 **Tool:** `chrome_navigate`  
 **Description:** When a `tabId` is specified for navigation, the tool may switch to a _different_ existing tab that already has the target URL instead of navigating the specified tab. The response says "Activated existing tab" but the wrong (unintended) tab was affected.  
-**Steps to reproduce:**
+**Status:** **RESOLVED** (2026-03-18)  
+**Root Cause:** The navigate tool ran its "check if URL already open" logic unconditionally, even when `tabId` was explicitly provided. When an existing tab with the target URL was found, the code would set `existingTab = explicitTab || pickBestMatch(...)`. If `tryGetTab(tabId)` returned null (race condition, closed tab, etc.) `existingTab` would fall back to the URL-matched tab (the wrong one). Additionally, even when `explicitTab` was found correctly, the entire logic still went through the "Activated existing tab" code path with a misleading response message.
 
-```json
-{ "url": "https://httpbin.org/forms/post", "tabId": 187425763 }
-```
+**Solution Implemented:**
 
-**Expected:** Tab 187425763 navigates to the URL.  
-**Actual:** A different existing tab with that URL was activated; tab 187425763 remained on its current page.  
-**Suggested fix:** When `tabId` is explicitly provided, always navigate that specific tab rather than looking for an existing match.
+- Added an early-return branch: when `tabId` is explicitly provided (`typeof tabId === 'number'`), the navigation is handled immediately — `chrome.tabs.update(tabId, { url })` is called directly without any URL-matching search
+- If the specified tab doesn't exist, a clear error is returned: `"Tab with ID {tabId} not found"`
+- Response message changed from `"Activated existing tab"` to `"Navigated tab to URL"` for explicit-tabId navigations
+- The "check if URL already open and activate existing tab" logic now only runs when no `tabId` is provided
+
+**Files Modified:**
+
+- [common.ts](app/chrome-extension/entrypoints/background/tools/browser/common.ts) — Added explicit-tabId early-return branch before the URL-matching section; simplified remaining URL-matching section to remove now-redundant `explicitTab` logic
+
+**Live Verification (2026-03-18):**
+
+- ✅ Tab A (`example.com`) + Tab B (`httpbin.org/forms/post`) already open → `chrome_navigate({ url: "https://httpbin.org/forms/post", tabId: Tab_A.id })` → Tab A navigates to target, response says `"Navigated tab to URL"` with correct `tabId`
+- ✅ Tab A page content confirmed as httpbin pizza form after navigation
+- ✅ Non-existent `tabId` returns `"Tab with ID 999999999 not found"` (clear error)
+- ✅ No-`tabId` navigation with existing URL still activates existing tab as expected (`"Activated existing tab"`)
 
 ---
 

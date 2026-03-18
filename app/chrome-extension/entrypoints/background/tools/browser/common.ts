@@ -139,7 +139,39 @@ class NavigateTool extends BaseBrowserToolExecutor {
         };
       }
 
-      // 1. Check if URL is already open
+      // 1. When tabId is explicitly provided, always navigate that specific tab directly.
+      //    Never search for an existing tab with the same URL — that would activate the
+      //    wrong tab instead of navigating the intended one (BUG-06).
+      if (typeof tabId === 'number') {
+        const explicitTab = await this.tryGetTab(tabId);
+        if (!explicitTab?.id) {
+          return createErrorResponse(`Tab with ID ${tabId} not found`);
+        }
+        await chrome.tabs.update(explicitTab.id, { url });
+        await this.ensureFocus(explicitTab, {
+          activate: background !== true,
+          focusWindow: background !== true,
+        });
+        const updatedTab = await chrome.tabs.get(explicitTab.id);
+        await this.triggerAutoCapture(updatedTab.id!, updatedTab.url);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                success: true,
+                message: 'Navigated tab to URL',
+                tabId: updatedTab.id,
+                windowId: updatedTab.windowId,
+                url: updatedTab.url,
+              }),
+            },
+          ],
+          isError: false,
+        };
+      }
+
+      // 2. No explicit tabId: check if URL is already open in any tab.
       // Prefer Chrome's URL match patterns for robust matching (host/path variations)
       console.log(`Checking if URL is already open: ${url}`);
 
@@ -250,16 +282,12 @@ class NavigateTool extends BaseBrowserToolExecutor {
         return best.tab;
       };
 
-      const explicitTab = await this.tryGetTab(tabId);
-      const existingTab = explicitTab || pickBestMatch(url, candidateTabs);
+      // When no tabId is provided, activate any existing tab that already has the URL
+      const existingTab = pickBestMatch(url, candidateTabs);
       if (existingTab?.id !== undefined) {
         console.log(
           `URL already open in Tab ID: ${existingTab.id}, Window ID: ${existingTab.windowId}`,
         );
-        // Update URL only when explicit tab specified and url differs
-        if (explicitTab && typeof explicitTab.id === 'number') {
-          await chrome.tabs.update(explicitTab.id, { url });
-        }
         // Optionally bring to foreground based on background flag
         await this.ensureFocus(existingTab, {
           activate: background !== true,
@@ -290,7 +318,7 @@ class NavigateTool extends BaseBrowserToolExecutor {
         };
       }
 
-      // 2. If URL is not already open, decide how to open it based on options
+      // 3. URL is not already open: decide how to open it based on options
       const openInNewWindow = newWindow || typeof width === 'number' || typeof height === 'number';
 
       if (openInNewWindow) {
