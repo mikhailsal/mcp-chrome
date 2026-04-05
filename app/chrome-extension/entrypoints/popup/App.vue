@@ -5,6 +5,7 @@
       <div class="header">
         <div class="header-content">
           <h1 class="header-title">Chrome MCP Server</h1>
+          <span class="build-hash">Build: {{ buildHash }}</span>
         </div>
       </div>
       <div class="content">
@@ -365,6 +366,8 @@ import {
   EditIcon,
   MarkerIcon,
 } from './components/icons';
+
+import { buildHash } from 'virtual:build-hash';
 
 // AgentChat theme: get it from preload to stay aligned with the sidepanel.
 const { theme: agentTheme, initTheme } = useAgentTheme();
@@ -1589,6 +1592,18 @@ onUnmounted(() => {
   font-weight: 700;
   color: #1e293b;
   margin: 0;
+}
+
+.build-hash {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 11px;
+  color: #94a3b8;
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .settings-button {

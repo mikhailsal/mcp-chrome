@@ -6,3 +6,7 @@ declare module '*.vue' {
   const component: DefineComponent<Props, RawBindings, any>;
   export default component;
 }
+
+declare module 'virtual:build-hash' {
+  export const buildHash: string;
+}

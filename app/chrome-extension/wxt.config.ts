@@ -1,3 +1,5 @@
+import { createHash } from 'crypto';
+import type { Plugin } from 'vite';
 import { defineConfig } from 'wxt';
 import tailwindcss from '@tailwindcss/vite';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
@@ -9,6 +11,37 @@ import IconsResolver from 'unplugin-icons/resolver';
 
 config({ path: resolve(process.cwd(), '.env') });
 config({ path: resolve(process.cwd(), '.env.local') });
+
+function generateBuildHash(): string {
+  return createHash('sha256')
+    .update(Date.now().toString() + Math.random().toString())
+    .digest('hex')
+    .slice(0, 8);
+}
+
+function buildHashPlugin(): Plugin {
+  const virtualModuleId = 'virtual:build-hash';
+  const resolvedVirtualModuleId = '\0' + virtualModuleId;
+
+  return {
+    name: 'build-hash',
+    resolveId(id) {
+      if (id === virtualModuleId) return resolvedVirtualModuleId;
+    },
+    load(id) {
+      if (id === resolvedVirtualModuleId) {
+        return `export const buildHash = ${JSON.stringify(generateBuildHash())};`;
+      }
+    },
+    handleHotUpdate({ modules, server }) {
+      const mod = server.moduleGraph.getModuleById(resolvedVirtualModuleId);
+      if (mod) {
+        server.moduleGraph.invalidateModule(mod);
+        return [...modules, mod];
+      }
+    },
+  };
+}
 
 const CHROME_EXTENSION_KEY = process.env.CHROME_EXTENSION_KEY;
 // Detect dev mode early for manifest-level switches
@@ -123,6 +156,7 @@ export default defineConfig({
   },
   vite: (env) => ({
     plugins: [
+      buildHashPlugin(),
       // TailwindCSS v4 Vite plugin – no PostCSS config required
       tailwindcss(),
       // Auto-register SVG icons as Vue components; all icons are bundled locally
