@@ -15,7 +15,8 @@ interface NavigateToolParams {
   refresh?: boolean;
   tabId?: number;
   windowId?: number;
-  background?: boolean; // when true, do not activate tab or focus window
+  background?: boolean; // when true, skip ALL focus changes (no tab activation, no window focus)
+  focusWindow?: boolean; // when true, also bring the browser window to OS foreground
 }
 
 /**
@@ -47,8 +48,16 @@ class NavigateTool extends BaseBrowserToolExecutor {
       refresh = false,
       tabId,
       background,
+      focusWindow: focusWindowParam,
       windowId,
     } = args;
+
+    // Focus semantics:
+    //   background=true  → skip ALL focus changes (no tab activation, no window focus)
+    //   background=false (default) → activate tab within window, but do NOT bring window to front
+    //   focusWindow=true → also bring the window to OS foreground (on top of all apps)
+    const shouldActivateTab = background !== true;
+    const shouldFocusWindow = background !== true && focusWindowParam === true;
 
     console.log(
       `Attempting to ${refresh ? 'refresh current tab' : `open URL: ${url}`} with options:`,
@@ -79,6 +88,7 @@ class NavigateTool extends BaseBrowserToolExecutor {
               type: 'text',
               text: JSON.stringify({
                 success: true,
+                action: 'refreshed',
                 message: 'Successfully refreshed current tab',
                 tabId: updatedTab.id,
                 windowId: updatedTab.windowId,
@@ -103,12 +113,12 @@ class NavigateTool extends BaseBrowserToolExecutor {
           return createErrorResponse('No target tab found for history navigation');
         }
 
-        // Respect background flag for focus behavior
         await this.ensureFocus(targetTab, {
-          activate: background !== true,
-          focusWindow: background !== true,
+          activate: shouldActivateTab,
+          focusWindow: shouldFocusWindow,
         });
 
+        const historyAction = url === 'forward' ? 'history_forward' : 'history_back';
         if (url === 'forward') {
           await chrome.tabs.goForward(targetTab.id);
           console.log(`Navigated forward in tab ID: ${targetTab.id}`);
@@ -119,7 +129,6 @@ class NavigateTool extends BaseBrowserToolExecutor {
 
         const updatedTab = await chrome.tabs.get(targetTab.id);
 
-        // Trigger auto-capture on history navigation
         await this.triggerAutoCapture(updatedTab.id!, updatedTab.url);
 
         return {
@@ -128,6 +137,7 @@ class NavigateTool extends BaseBrowserToolExecutor {
               type: 'text',
               text: JSON.stringify({
                 success: true,
+                action: historyAction,
                 message: `Successfully navigated ${url} in browser history`,
                 tabId: updatedTab.id,
                 windowId: updatedTab.windowId,
@@ -149,8 +159,8 @@ class NavigateTool extends BaseBrowserToolExecutor {
         }
         await chrome.tabs.update(explicitTab.id, { url });
         await this.ensureFocus(explicitTab, {
-          activate: background !== true,
-          focusWindow: background !== true,
+          activate: shouldActivateTab,
+          focusWindow: shouldFocusWindow,
         });
         // Use the requested URL directly — chrome.tabs.get immediately after update
         // returns the pre-navigation (stale) URL because navigation hasn't completed (BUG-17).
@@ -161,6 +171,7 @@ class NavigateTool extends BaseBrowserToolExecutor {
               type: 'text',
               text: JSON.stringify({
                 success: true,
+                action: 'navigated',
                 message: 'Navigated tab to URL',
                 tabId: explicitTab.id,
                 windowId: explicitTab.windowId,
@@ -292,17 +303,19 @@ class NavigateTool extends BaseBrowserToolExecutor {
         console.log(
           `URL already open in Tab ID: ${existingTab.id}, Window ID: ${existingTab.windowId}`,
         );
-        // Optionally bring to foreground based on background flag
         await this.ensureFocus(existingTab, {
-          activate: background !== true,
-          focusWindow: background !== true,
+          activate: shouldActivateTab,
+          focusWindow: shouldFocusWindow,
         });
 
-        console.log(`Activated existing Tab ID: ${existingTab.id}`);
-        // Get updated tab information and return it
+        // Auto-reload the existing tab so callers get fresh content.
+        // "Navigate to X" semantically means "load X" — silently activating a stale tab
+        // confuses AI callers who expect a page load to have occurred.
+        await chrome.tabs.reload(existingTab.id);
+        console.log(`Reused and reloaded existing Tab ID: ${existingTab.id}`);
+
         const updatedTab = await chrome.tabs.get(existingTab.id);
 
-        // Trigger auto-capture on existing tab activation
         await this.triggerAutoCapture(updatedTab.id!, updatedTab.url);
 
         return {
@@ -311,7 +324,9 @@ class NavigateTool extends BaseBrowserToolExecutor {
               type: 'text',
               text: JSON.stringify({
                 success: true,
-                message: 'Activated existing tab',
+                action: 'reused_and_reloaded',
+                message:
+                  'Found an existing tab with a matching URL. Activated it and reloaded the page to ensure fresh content.',
                 tabId: updatedTab.id,
                 windowId: updatedTab.windowId,
                 url: updatedTab.url,
@@ -326,18 +341,16 @@ class NavigateTool extends BaseBrowserToolExecutor {
       if (openInNewWindow) {
         console.log('Opening URL in a new window.');
 
-        // Create new window
         const newWindow = await chrome.windows.create({
           url: url,
           width: typeof width === 'number' ? width : DEFAULT_WINDOW_WIDTH,
           height: typeof height === 'number' ? height : DEFAULT_WINDOW_HEIGHT,
-          focused: background === true ? false : true,
+          focused: shouldFocusWindow,
         });
 
         if (newWindow && newWindow.id !== undefined) {
           console.log(`URL opened in new Window ID: ${newWindow.id}`);
 
-          // Trigger auto-capture if the new window has a tab
           const firstTab = newWindow.tabs?.[0];
           if (firstTab?.id) {
             await this.triggerAutoCapture(firstTab.id, url);
@@ -349,6 +362,7 @@ class NavigateTool extends BaseBrowserToolExecutor {
                 type: 'text',
                 text: JSON.stringify({
                   success: true,
+                  action: 'created_new_window',
                   message: 'Opened URL in new window',
                   windowId: newWindow.id,
                   tabs: newWindow.tabs
@@ -380,9 +394,9 @@ class NavigateTool extends BaseBrowserToolExecutor {
           const newTab = await chrome.tabs.create({
             url: url,
             windowId: targetWindow.id,
-            active: background === true ? false : true,
+            active: shouldActivateTab,
           });
-          if (background !== true) {
+          if (shouldFocusWindow) {
             await chrome.windows.update(targetWindow.id, { focused: true });
           }
 
@@ -390,7 +404,6 @@ class NavigateTool extends BaseBrowserToolExecutor {
             `URL opened in new Tab ID: ${newTab.id} in existing Window ID: ${targetWindow.id}`,
           );
 
-          // Trigger auto-capture on new tab
           if (newTab.id) {
             await this.triggerAutoCapture(newTab.id, url);
           }
@@ -401,6 +414,7 @@ class NavigateTool extends BaseBrowserToolExecutor {
                 type: 'text',
                 text: JSON.stringify({
                   success: true,
+                  action: 'created_new_tab',
                   message: 'Opened URL in new tab in existing window',
                   tabId: newTab.id,
                   windowId: targetWindow.id,
@@ -419,13 +433,12 @@ class NavigateTool extends BaseBrowserToolExecutor {
             url: url,
             width: DEFAULT_WINDOW_WIDTH,
             height: DEFAULT_WINDOW_HEIGHT,
-            focused: true,
+            focused: shouldFocusWindow,
           });
 
           if (fallbackWindow && fallbackWindow.id !== undefined) {
             console.log(`URL opened in fallback new Window ID: ${fallbackWindow.id}`);
 
-            // Trigger auto-capture if fallback window has a tab
             const firstTab = fallbackWindow.tabs?.[0];
             if (firstTab?.id) {
               await this.triggerAutoCapture(firstTab.id, url);
@@ -437,6 +450,7 @@ class NavigateTool extends BaseBrowserToolExecutor {
                   type: 'text',
                   text: JSON.stringify({
                     success: true,
+                    action: 'created_new_window',
                     message: 'Opened URL in new window',
                     windowId: fallbackWindow.id,
                     tabs: fallbackWindow.tabs

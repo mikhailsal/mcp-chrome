@@ -397,7 +397,11 @@ export const TOOL_SCHEMAS: Tool[] = [
   {
     name: TOOL_NAMES.BROWSER.NAVIGATE,
     description:
-      'Navigate to a URL, refresh the current tab, or navigate browser history (back/forward)',
+      'Navigate to a URL, refresh the current tab, or navigate browser history (back/forward). ' +
+      'IMPORTANT behavior notes: (1) By default, the tab is activated within its window but the browser window is NOT brought to the foreground (non-disruptive to the user). ' +
+      'Set focusWindow=true to also bring the window to the foreground. Set background=true to skip tab activation entirely. ' +
+      '(2) If a tab with the same URL already exists and no tabId/newWindow/width/height is specified, that tab is reused AND automatically reloaded to ensure fresh content. ' +
+      'Check the "action" field in the response to see exactly what happened (e.g. "reused_and_reloaded", "created_new_tab", "created_new_window", "navigated", "refreshed", "history_back", "history_forward").',
     inputSchema: {
       type: 'object',
       properties: {
@@ -413,7 +417,7 @@ export const TOOL_SCHEMAS: Tool[] = [
         tabId: {
           type: 'number',
           description:
-            'Target an existing tab by ID (if provided, navigate/refresh/back/forward that tab instead of the active tab).',
+            'Target an existing tab by ID (if provided, navigate/refresh/back/forward that tab instead of the active tab). When tabId is provided, the tab is navigated directly — no existing-tab search is performed.',
         },
         windowId: {
           type: 'number',
@@ -423,7 +427,12 @@ export const TOOL_SCHEMAS: Tool[] = [
         background: {
           type: 'boolean',
           description:
-            'Perform the operation without stealing focus (do not activate the tab or focus the window). Default: false',
+            'When true, skip ALL focus changes: do not activate the tab and do not focus the window. Useful for fully invisible background operations. Default: false',
+        },
+        focusWindow: {
+          type: 'boolean',
+          description:
+            'When true, bring the browser window to the foreground (OS-level focus). By default only the tab is activated within its window without bringing the window to the front, which avoids disrupting the user. Default: false',
         },
         width: {
           type: 'number',
