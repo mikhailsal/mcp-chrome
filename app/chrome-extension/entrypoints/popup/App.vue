@@ -5,7 +5,7 @@
       <div class="header">
         <div class="header-content">
           <h1 class="header-title">Chrome MCP Server</h1>
-          <span class="build-hash">Build: {{ buildHash }}</span>
+          <span class="build-timestamp">{{ buildTimestamp }}</span>
         </div>
       </div>
       <div class="content">
@@ -367,7 +367,7 @@ import {
   MarkerIcon,
 } from './components/icons';
 
-import { buildHash } from 'virtual:build-hash';
+import { buildTimestamp } from 'virtual:build-timestamp';
 
 // AgentChat theme: get it from preload to stay aligned with the sidepanel.
 const { theme: agentTheme, initTheme } = useAgentTheme();
@@ -1594,14 +1594,13 @@ onUnmounted(() => {
   margin: 0;
 }
 
-.build-hash {
+.build-timestamp {
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   font-size: 11px;
   color: #94a3b8;
   background: #f1f5f9;
   padding: 2px 8px;
   border-radius: 4px;
-  letter-spacing: 0.5px;
   white-space: nowrap;
   flex-shrink: 0;
 }

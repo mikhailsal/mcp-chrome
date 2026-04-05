@@ -7,6 +7,6 @@ declare module '*.vue' {
   export default component;
 }
 
-declare module 'virtual:build-hash' {
-  export const buildHash: string;
+declare module 'virtual:build-timestamp' {
+  export const buildTimestamp: string;
 }

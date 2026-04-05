@@ -55,21 +55,22 @@ MCP Client (VS Code/Cursor) → mcp-server-stdio.js (global mcp-chrome-bridge)
 - Then kill old native server: `kill $(lsof -t -i :12306)` — Chrome auto-restarts it
 - Stdio bridge logs go to stderr (visible in IDE MCP output panel)
 
-## Build Hash Indicator
+## Build Timestamp Indicator
 
-The extension popup displays a **build hash** in the header (e.g., `Build: a3f7c2e1`).
-This is an 8-character SHA-256 hash that changes on every build or dev-server module reload.
+The extension popup displays a **build timestamp** in the header (e.g., `Apr 5, 17:32:19`).
+This shows the exact date and time of the last build or dev-server module reload.
 
-**Purpose**: Instantly verify that the extension has been updated after a code change.
-If the hash hasn't changed, the extension is still running the old code and needs to be reloaded.
+**Purpose**: Instantly verify when the extension was last updated. If the timestamp is old,
+the extension is still running stale code and needs to be reloaded.
 
-**Implementation**: A custom Vite plugin (`buildHashPlugin` in `wxt.config.ts`) provides a
-virtual module `virtual:build-hash` that generates a fresh hash each time it is loaded.
+**Implementation**: A custom Vite plugin (`buildTimestampPlugin` in `wxt.config.ts`) provides a
+virtual module `virtual:build-timestamp` that generates a fresh local-time timestamp each time
+it is loaded.
 
-- In **dev mode** (`pnpm dev:extension`): the hash changes each time a file is modified and
+- In **dev mode** (`pnpm dev:extension`): the timestamp updates each time a file is modified and
   the popup is reopened, because the Vite dev server re-serves the virtual module.
-- In **build mode** (`wxt build`): the hash is embedded at compile time, so it changes
-  with every rebuild.
+- In **build mode** (`wxt build`): the timestamp is embedded at compile time, so it reflects
+  the exact moment of the build.
 
 ## Build Commands
 
@@ -91,7 +92,7 @@ pnpm dev:extension
 
 This starts the WXT dev server with **automatic extension reloading**. When you edit source
 files, WXT rebuilds and pushes updates to the extension automatically — no manual reload
-needed. The popup's build hash changes on every code change, confirming the update was applied.
+needed. The popup's build timestamp updates on every code change, confirming the update was applied.
 
 Load the extension from `.output/chrome-mv3-dev/` as an unpacked extension in Chrome.
 
@@ -113,7 +114,7 @@ This runs `wxt build --mode development` (produces sourcemaps, no dev server hot
 and watches for file changes to automatically rebuild.
 
 After a rebuild, press **Alt+R** on `chrome://extensions/` (or click the reload button on the
-extension card) to reload the extension in Chrome. Check the **build hash** in the popup to
+extension card) to reload the extension in Chrome. Check the **build timestamp** in the popup to
 confirm the new code is loaded.
 
 ### One-off dev build (no watch)
@@ -128,8 +129,8 @@ pnpm build:dev
 After any rebuild or dev-server hot update:
 
 1. Click the extension icon to open the popup
-2. Check the **Build:** hash in the top-right corner of the header
-3. If the hash matches the previous one, the extension has not been updated —
+2. Check the timestamp in the top-right corner of the header (e.g., `Apr 5, 17:32:19`)
+3. If the timestamp hasn't changed, the extension has not been updated —
    try removing and re-adding it from `chrome://extensions/`
 
 ### Installing dependencies

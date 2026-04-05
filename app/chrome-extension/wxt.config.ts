@@ -1,4 +1,3 @@
-import { createHash } from 'crypto';
 import type { Plugin } from 'vite';
 import { defineConfig } from 'wxt';
 import tailwindcss from '@tailwindcss/vite';
@@ -12,25 +11,38 @@ import IconsResolver from 'unplugin-icons/resolver';
 config({ path: resolve(process.cwd(), '.env') });
 config({ path: resolve(process.cwd(), '.env.local') });
 
-function generateBuildHash(): string {
-  return createHash('sha256')
-    .update(Date.now().toString() + Math.random().toString())
-    .digest('hex')
-    .slice(0, 8);
+function generateBuildTimestamp(): string {
+  const now = new Date();
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${months[now.getMonth()]} ${now.getDate()}, ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
 }
 
-function buildHashPlugin(): Plugin {
-  const virtualModuleId = 'virtual:build-hash';
+function buildTimestampPlugin(): Plugin {
+  const virtualModuleId = 'virtual:build-timestamp';
   const resolvedVirtualModuleId = '\0' + virtualModuleId;
 
   return {
-    name: 'build-hash',
+    name: 'build-timestamp',
     resolveId(id) {
       if (id === virtualModuleId) return resolvedVirtualModuleId;
     },
     load(id) {
       if (id === resolvedVirtualModuleId) {
-        return `export const buildHash = ${JSON.stringify(generateBuildHash())};`;
+        return `export const buildTimestamp = ${JSON.stringify(generateBuildTimestamp())};`;
       }
     },
     handleHotUpdate({ modules, server }) {
@@ -156,7 +168,7 @@ export default defineConfig({
   },
   vite: (env) => ({
     plugins: [
-      buildHashPlugin(),
+      buildTimestampPlugin(),
       // TailwindCSS v4 Vite plugin – no PostCSS config required
       tailwindcss(),
       // Auto-register SVG icons as Vue components; all icons are bundled locally
