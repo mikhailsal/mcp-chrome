@@ -159,28 +159,53 @@ class ScreenshotTool extends BaseBrowserToolExecutor {
           const tabId = tab.id!;
           const { cdpSessionManager } = await import('@/utils/cdp-session-manager');
           await cdpSessionManager.withSession(tabId, 'screenshot', async () => {
-            const metrics: any = await cdpSessionManager.sendCommand(
-              tabId,
-              'Page.getLayoutMetrics',
-              {},
-            );
-            const viewport = metrics?.layoutViewport ||
-              metrics?.visualViewport || {
-                clientWidth: 800,
-                clientHeight: 600,
-                pageX: 0,
-                pageY: 0,
-              };
-            const shot: any = await cdpSessionManager.sendCommand(tabId, 'Page.captureScreenshot', {
-              format: 'png',
-            });
-            const base64Data = typeof shot?.data === 'string' ? shot.data : '';
-            if (!base64Data) {
-              throw new Error('CDP Page.captureScreenshot returned empty data');
+            const wantResize = args.width || args.height;
+
+            if (wantResize) {
+              const emulateW = Math.round(args.width || args.height! * (16 / 9));
+              const emulateH = Math.round(args.height || args.width! * (9 / 16));
+              await cdpSessionManager.sendCommand(tabId, 'Emulation.setDeviceMetricsOverride', {
+                width: emulateW,
+                height: emulateH,
+                deviceScaleFactor: 0,
+                mobile: false,
+              });
+              // Allow the page to re-layout at the new viewport size
+              await new Promise((resolve) => setTimeout(resolve, 150));
             }
-            finalImageDataUrl = `data:image/png;base64,${base64Data}`;
-            finalImageWidthCss = Math.round(viewport.clientWidth || 800);
-            finalImageHeightCss = Math.round(viewport.clientHeight || 600);
+
+            try {
+              const metrics: any = await cdpSessionManager.sendCommand(
+                tabId,
+                'Page.getLayoutMetrics',
+                {},
+              );
+              const viewport = metrics?.layoutViewport ||
+                metrics?.visualViewport || {
+                  clientWidth: 800,
+                  clientHeight: 600,
+                  pageX: 0,
+                  pageY: 0,
+                };
+              const shot: any = await cdpSessionManager.sendCommand(
+                tabId,
+                'Page.captureScreenshot',
+                { format: 'png' },
+              );
+              const base64Data = typeof shot?.data === 'string' ? shot.data : '';
+              if (!base64Data) {
+                throw new Error('CDP Page.captureScreenshot returned empty data');
+              }
+              finalImageDataUrl = `data:image/png;base64,${base64Data}`;
+              finalImageWidthCss = Math.round(viewport.clientWidth || 800);
+              finalImageHeightCss = Math.round(viewport.clientHeight || 600);
+            } finally {
+              if (wantResize) {
+                await cdpSessionManager
+                  .sendCommand(tabId, 'Emulation.clearDeviceMetricsOverride', {})
+                  .catch(() => {});
+              }
+            }
           });
         } catch (cdpError) {
           console.warn('CDP viewport capture failed, falling back to captureVisibleTab:', cdpError);

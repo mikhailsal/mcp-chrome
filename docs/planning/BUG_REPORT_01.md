@@ -384,11 +384,32 @@ The likely cause of the original report: `chrome_read_page` shows the button as 
 
 ---
 
-### BUG-21 · `chrome_screenshot width/height` — Parameters have no visible effect
+### BUG-21 · `chrome_screenshot width/height` — Parameters have no visible effect · ✅ **FIXED**
 
 **Tool:** `chrome_screenshot`  
 **Description:** Passing `width` and `height` to `chrome_screenshot` produces an image of the same size as without those parameters. The dimensions are silently ignored.  
-**Suggested fix:** Either implement viewport resizing before capture, or remove these parameters and document the limitation.
+**Status:** **RESOLVED** (2026-04-05)  
+**Root Cause:** The simple viewport capture path (Path 1 — CDP, used when neither `fullPage` nor `selector` is set) never applied `width`/`height` parameters. The fullPage and selector paths already handled resizing, but the most common capture path ignored the parameters entirely — the screenshot was always taken at the browser's actual viewport size.
+
+**Solution Implemented:**
+
+- When `width` and/or `height` are provided, the simple viewport path now temporarily emulates the requested viewport size using CDP `Emulation.setDeviceMetricsOverride` before capturing. This causes the page to re-layout at the requested resolution — text reflows, responsive breakpoints trigger, etc.
+- After capture, `Emulation.clearDeviceMetricsOverride` restores the original viewport, so subsequent browsing is unaffected
+- When only one dimension is supplied, the other defaults to a 16:9 aspect ratio
+- The emulation + capture + clear sequence runs inside the existing `cdpSessionManager.withSession` block; the clear is in a `finally` to ensure cleanup even on capture failure
+
+**Files Modified:**
+
+- [screenshot.ts](../../app/chrome-extension/entrypoints/background/tools/browser/screenshot.ts) — Restructured CDP Strategy A in simple viewport path to apply `Emulation.setDeviceMetricsOverride` before capture and `clearDeviceMetricsOverride` after
+
+**Live Verification (2026-04-05):**
+
+- ✅ `chrome_screenshot({ width: 400, height: 300 })` on `example.com` → page rendered at 400×300 viewport (text reflows, not just downscaled)
+- ✅ `chrome_screenshot({ width: 1920, height: 1080 })` → page rendered at full HD, text on single line
+- ✅ `chrome_screenshot({ width: 500 })` → width=500, height auto-calculated (281), narrow viewport
+- ✅ `chrome_screenshot({})` (no dimensions) → full browser viewport captured unchanged (no regression)
+- ✅ Viewport correctly restored after custom-size screenshot (follow-up `chrome_screenshot({})` returns to original size)
+- ✅ `chrome_screenshot({ width: 400, height: 300, fullPage: true })` → still works correctly (unrelated path)
 
 ---
 
