@@ -147,12 +147,14 @@ class ScreenshotTool extends BaseBrowserToolExecutor {
     let pageDetails: ScreenshotPageDetails | undefined;
 
     try {
-      const background = args.background === true;
-      // CDP path: background=true with simple viewport capture (no fullPage, no selector)
-      const canUseCdpCapture = background && !fullPage && !selector;
+      const isSimpleViewport = !fullPage && !selector;
 
-      // === Path 1: CDP viewport capture (no content script needed) ===
-      if (canUseCdpCapture) {
+      // === Path 1: Simple viewport capture (no content script needed) ===
+      // For basic viewport screenshots, avoid injecting a content script entirely.
+      // This prevents the "Extension manifest must request permission for content
+      // scripts" error on external pages where host permissions may not be granted.
+      if (isSimpleViewport) {
+        // Strategy A: try CDP first (works on any page, doesn't require focus)
         try {
           const tabId = tab.id!;
           const { cdpSessionManager } = await import('@/utils/cdp-session-manager');
@@ -180,14 +182,27 @@ class ScreenshotTool extends BaseBrowserToolExecutor {
             finalImageWidthCss = Math.round(viewport.clientWidth || 800);
             finalImageHeightCss = Math.round(viewport.clientHeight || 600);
           });
-        } catch (e) {
-          console.warn('CDP viewport capture failed, falling back to helper path:', e);
+        } catch (cdpError) {
+          console.warn('CDP viewport capture failed, falling back to captureVisibleTab:', cdpError);
+        }
+
+        // Strategy B: fall back to captureVisibleTab (requires tab to be visible)
+        if (!finalImageDataUrl) {
+          try {
+            finalImageDataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, {
+              format: 'png',
+            });
+            const bitmap = await createImageBitmapFromUrl(finalImageDataUrl);
+            finalImageWidthCss = bitmap.width;
+            finalImageHeightCss = bitmap.height;
+          } catch (captureError) {
+            console.warn('captureVisibleTab also failed:', captureError);
+          }
         }
       }
 
-      // === Path 2: Helper-assisted capture (requires content script) ===
+      // === Path 2: Advanced capture (fullPage or selector — requires content script) ===
       if (!finalImageDataUrl) {
-        // Always inject helper when we need pageDetails
         await this.injectContentScript(tab.id!, ['inject-scripts/screenshot-helper.js']);
         await new Promise((resolve) => setTimeout(resolve, SCREENSHOT_CONSTANTS.SCRIPT_INIT_DELAY));
 
@@ -213,7 +228,6 @@ class ScreenshotTool extends BaseBrowserToolExecutor {
         if (fullPage) {
           this.logInfo('Capturing full page...');
           finalImageDataUrl = await this._captureFullPage(tab.id!, args, pageDetails);
-          // Compute final CSS size
           if (args.width && args.height) {
             finalImageWidthCss = args.width;
             finalImageHeightCss = args.height;
@@ -244,7 +258,7 @@ class ScreenshotTool extends BaseBrowserToolExecutor {
             finalImageHeightCss = pageDetails.viewportHeight;
           }
         } else {
-          // Visible area only
+          // Fallback: visible area via content script path (should not normally reach here)
           this.logInfo('Capturing visible area...');
           finalImageDataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
           finalImageWidthCss = pageDetails.viewportWidth;

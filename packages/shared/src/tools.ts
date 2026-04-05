@@ -447,12 +447,16 @@ export const TOOL_SCHEMAS: Tool[] = [
   {
     name: TOOL_NAMES.BROWSER.SCREENSHOT,
     description:
-      '[Prefer read_page over taking a screenshot and Prefer chrome_computer] Take a screenshot of the current page or a specific element. For new usage, use chrome_computer with action="screenshot". Use this tool if you need advanced options.',
+      '[Prefer read_page over taking a screenshot and Prefer chrome_computer] Take a screenshot of the current page or a specific element. Simple viewport captures use CDP and work on any tab (including background tabs) without special permissions. Full-page or element (selector) captures inject a content script, which requires host permissions to be granted to the extension. For new usage, use chrome_computer with action="screenshot". Use this tool if you need advanced options.',
     inputSchema: {
       type: 'object',
       properties: {
         name: { type: 'string', description: 'Name for the screenshot, if saving as PNG' },
-        selector: { type: 'string', description: 'CSS selector for element to screenshot' },
+        selector: {
+          type: 'string',
+          description:
+            'CSS selector for element to screenshot. Uses content script injection which requires host permissions to be granted to the extension.',
+        },
         tabId: {
           type: 'number',
           description: 'Target tab ID to capture from (default: active tab).',
@@ -464,7 +468,7 @@ export const TOOL_SCHEMAS: Tool[] = [
         background: {
           type: 'boolean',
           description:
-            'Attempt capture without bringing tab/window to foreground. CDP-based capture is used for simple viewport captures. For element/full-page capture, the tab may still be made active in its window without focusing the window. Default: false',
+            'Hint to avoid bringing tab/window to foreground. For simple viewport captures (no selector, no fullPage), CDP is always tried first regardless of this flag. For element/full-page capture, the tab may still be made active. Default: false',
         },
         width: { type: 'number', description: 'Width in pixels (default: 800)' },
         height: { type: 'number', description: 'Height in pixels (default: 600)' },
@@ -475,7 +479,8 @@ export const TOOL_SCHEMAS: Tool[] = [
         },
         fullPage: {
           type: 'boolean',
-          description: 'Store screenshot of the entire page (default: true)',
+          description:
+            'Capture the entire scrollable page (default: false). Uses content script injection which requires host permissions to be granted to the extension. If omitted or false, only the visible viewport is captured via CDP (works on any tab including background tabs, no host permissions needed).',
         },
         savePng: {
           type: 'boolean',

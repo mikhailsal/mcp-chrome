@@ -86,27 +86,42 @@
 
 ## High
 
-### BUG-04 · `chrome_screenshot` — Default mode fails on external pages with cryptic error
+### BUG-04 · `chrome_screenshot` — Default mode fails on external pages with cryptic error · ✅ **FIXED**
 
 **Tool:** `chrome_screenshot`  
 **Description:** Using the default mode (no `background:true`) on any external page (e.g., `example.com`, `httpbin.org`) fails with `"Extension manifest must request permission for content scripts."` There is no warning in the tool description that default mode requires special permissions. Most users will hit this immediately on common pages.  
-**Steps to reproduce:**
+**Status:** **RESOLVED** (2026-04-05)  
+**Root Cause:** The default viewport-only code path always injected a content script (`screenshot-helper.js`) via `chrome.scripting.executeScript()` and then used `chrome.tabs.captureVisibleTab()`. The latter requires `activeTab` permission to be in effect (granted by user interaction with the extension on that specific tab). On tabs where the extension was never explicitly invoked, this produced `"The 'activeTab' permission is not in effect because this extension has not been invoked."` Content script injection was entirely unnecessary for simple viewport captures.
 
-```json
-{ "tabId": <external-page-tab> }
-```
+**Solution Implemented:**
 
-**Expected:** Screenshot captured.  
-**Actual:** `"Extension manifest must request permission for content scripts."`  
-**Suggested fix:** Either default to `background=true` for external pages, or add a prominent note that `background:true` is required for most real-world pages.
+- Restructured `screenshot.ts` to separate simple viewport captures from advanced captures
+- Simple viewport captures (no `fullPage`, no `selector`) now try CDP (`Page.captureScreenshot`) first, with `captureVisibleTab()` as a fallback — **no content script injection at all**
+- Full-page and element (selector) captures still use content script injection (which works on any tab as long as `<all_urls>` host permissions are granted)
+- Updated tool schema descriptions to clearly document the two capture modes and their requirements
+- Also fixed: `fullPage` default was documented as `true` but was actually `false` in code
+
+**Files Modified:**
+
+- [screenshot.ts](app/chrome-extension/entrypoints/background/tools/browser/screenshot.ts) — Restructured capture paths: CDP-first for viewport, content-script only for fullPage/selector
+- [tools.ts](packages/shared/src/tools.ts) — Updated tool description, `selector`, `fullPage`, and `background` parameter docs
+
+**Live Verification (2026-04-05):**
+
+- ✅ `chrome_screenshot({ tabId: example.com })` on background tab — SUCCESS via CDP (was failing)
+- ✅ `chrome_screenshot({ tabId: httpbin.org })` on background tab — SUCCESS via CDP (was failing)
+- ✅ `chrome_screenshot({ tabId: httpbin.org, fullPage: true })` — SUCCESS (content script path)
+- ✅ `chrome_screenshot({ tabId: wikipedia.org, fullPage: true })` on background tab — SUCCESS
+- ✅ `chrome_screenshot({ storeBase64: true })` — correct images returned
 
 ---
 
-### BUG-05 · `chrome_screenshot` — Silent dual code paths with no documentation
+### BUG-05 · `chrome_screenshot` — Silent dual code paths with no documentation · ✅ **FIXED**
 
 **Tool:** `chrome_screenshot`  
 **Description:** `background=false` uses content scripts (fails on most external sites); `background=true` uses CDP (works everywhere). This critical behavioral difference is not mentioned in the description. The tool appears to work or fail unpredictably depending on the page type.  
-**Suggested fix:** Document the two modes clearly. Consider making CDP the default or adding auto-fallback.
+**Status:** **RESOLVED** (2026-04-05) — fixed together with BUG-04.  
+**Solution:** CDP is now the default for simple viewport captures regardless of the `background` flag. The tool description and parameter documentation now clearly explain the two capture modes: CDP for viewport (works anywhere, no permissions needed) vs content script for fullPage/selector (requires host permissions). See BUG-04 for full details.
 
 ---
 
