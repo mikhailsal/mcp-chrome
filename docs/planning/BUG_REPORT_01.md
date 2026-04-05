@@ -154,6 +154,8 @@
 
 ### BUG-07 · `chrome_click_element` — `input[type=submit]` selector fails despite visible element
 
+**Status: NOT REPRODUCED (2026-04-05)**
+
 **Tool:** `chrome_click_element`  
 **Description:** The selector `input[type=submit]` returns "Element not found" even when `<input type="submit">` is clearly visible on the page (confirmed via screenshot and `chrome_read_page`). Other selectors on the same page work correctly.  
 **Steps to reproduce:**
@@ -165,6 +167,16 @@
 **Expected:** Submit button clicked.  
 **Actual:** `"Element not found: input[type=submit]"`  
 **Suggested fix:** Debug attribute selector matching in the element resolver.
+
+**Investigation (2026-04-05):**
+
+The bug could not be reproduced. The original test page (httpbin.org/forms/post) uses `<button>Submit order</button>`, not `<input type="submit">`. The CSS attribute selector `input[type=submit]` correctly returns no match because no such element exists on that page. When tested on a page with an actual `<input type="submit">` element, `chrome_click_element` finds and clicks it successfully.
+
+The likely cause of the original report: `chrome_read_page` shows the button as `button "Submit order" [ref=ref_14]`, which could be misread as `<input type="submit">` by an AI agent. The selector `input[type=submit]` was never going to match a `<button>` element.
+
+**Improvements applied nonetheless:**
+
+- [click-helper.js](../../app/chrome-extension/inject-scripts/click-helper.js) — Replaced `document.querySelector()` with `querySelectorDeep()` for shadow DOM traversal (parity with accessibility-tree-helper.js). Also fixed `isElementVisible()` to correctly handle elements inside shadow roots whose host is returned by `document.elementFromPoint()`.
 
 ---
 

@@ -116,10 +116,10 @@ if (window.__CLICK_HELPER_INITIALIZED__) {
           };
         }
       } else {
-        element = document.querySelector(selector);
+        element = querySelectorDeep(selector);
         if (!element) {
           return {
-            error: `Element with selector "${selector}" not found`,
+            error: `Element not found: ${selector}`,
           };
         }
 
@@ -145,7 +145,6 @@ if (window.__CLICK_HELPER_INITIALIZED__) {
           clickMethod: 'selector',
         };
 
-        // First sroll so that the element is in view, then check visibility.
         element.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'center' });
         await new Promise((resolve) => setTimeout(resolve, 100));
         elementInfo.isVisible = isElementVisible(element);
@@ -303,6 +302,44 @@ if (window.__CLICK_HELPER_INITIALIZED__) {
   }
 
   /**
+   * Query a CSS selector across the main document and open shadow roots.
+   * Returns the first match found (depth-first).
+   */
+  function querySelectorDeep(selector) {
+    try {
+      const direct = document.querySelector(selector);
+      if (direct) return direct;
+    } catch (_) {
+      return null;
+    }
+    const visited = new Set();
+    const stack = [document.documentElement];
+    while (stack.length) {
+      const node = stack.pop();
+      if (!node || visited.has(node)) continue;
+      visited.add(node);
+      try {
+        const sr = node.shadowRoot;
+        if (sr) {
+          try {
+            const hit = sr.querySelector(selector);
+            if (hit) return hit;
+          } catch (_) {}
+          try {
+            const srChildren = sr.children || [];
+            for (let i = 0; i < srChildren.length; i++) stack.push(srChildren[i]);
+          } catch (_) {}
+        }
+      } catch (_) {}
+      try {
+        const children = node.children || [];
+        for (let i = 0; i < children.length; i++) stack.push(children[i]);
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  /**
    * Check if an element is visible
    * @param {Element} element - The element to check
    * @returns {boolean} - Whether the element is visible
@@ -335,7 +372,22 @@ if (window.__CLICK_HELPER_INITIALIZED__) {
     const elementAtPoint = document.elementFromPoint(centerX, centerY);
     if (!elementAtPoint) return false;
 
-    return element === elementAtPoint || element.contains(elementAtPoint);
+    if (element === elementAtPoint || element.contains(elementAtPoint)) return true;
+
+    try {
+      const root = element.getRootNode();
+      if (
+        root &&
+        root.host &&
+        (root.host === elementAtPoint ||
+          root.host.contains(elementAtPoint) ||
+          elementAtPoint.contains(root.host))
+      ) {
+        return true;
+      }
+    } catch (_) {}
+
+    return false;
   }
 
   // Listen for messages from the extension
