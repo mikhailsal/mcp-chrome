@@ -28,8 +28,8 @@ We welcome contributions in many forms:
 1. **Fork and clone the repository**
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/chrome-mcp-server.git
-cd chrome-mcp-server
+git clone https://github.com/YOUR_USERNAME/mcp-chrome.git
+cd mcp-chrome
 ```
 
 2. **Install dependencies**

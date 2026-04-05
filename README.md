@@ -1,16 +1,16 @@
 # Chrome MCP Server 🚀
 
-[![Stars](https://img.shields.io/github/stars/hangwin/mcp-chrome)](https://img.shields.io/github/stars/hangwin/mcp-chrome)
+[![Stars](https://img.shields.io/github/stars/mikhailsal/mcp-chrome)](https://github.com/mikhailsal/mcp-chrome)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8+-blue.svg)](https://www.typescriptlang.org/)
 [![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-green.svg)](https://developer.chrome.com/docs/extensions/)
-[![Release](https://img.shields.io/github/v/release/hangwin/mcp-chrome.svg)](https://img.shields.io/github/v/release/hangwin/mcp-chrome.svg)
+[![Release](https://img.shields.io/github/v/release/mikhailsal/mcp-chrome.svg)](https://github.com/mikhailsal/mcp-chrome/releases)
 
 > 🌟 **Turn your Chrome browser into your intelligent assistant** - Let AI take control of your browser, transforming it into a powerful AI-controlled automation tool.
 
 **📖 Documentation**: [README](README.md) | [Architecture](docs/ARCHITECTURE.md) | [Tools](docs/TOOLS.md) | [Troubleshooting](docs/TROUBLESHOOTING.md) | [Windows Install](docs/WINDOWS_INSTALL.md)
 
-> The project is still in its early stages and is under intensive development. More features, stability improvements, and other enhancements will follow.
+> This project was originally inspired by [hangwin/mcp-chrome](https://github.com/hangwin/mcp-chrome) and has since diverged significantly with independent development, new features, and architectural changes.
 
 ---
 
@@ -56,7 +56,7 @@ Chrome MCP Server is a Chrome extension-based **Model Context Protocol (MCP) ser
 
 1. **Download the latest Chrome extension from GitHub**
 
-Download link: https://github.com/hangwin/mcp-chrome/releases
+Download link: https://github.com/mikhailsal/mcp-chrome/releases
 
 2. **Install mcp-chrome-bridge globally**
 

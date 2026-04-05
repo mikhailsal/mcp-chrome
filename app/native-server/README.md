@@ -21,9 +21,9 @@ This is a Fastify-based TypeScript project for native communication with a Chrom
 ### Installation
 
 ```bash
-git clone https://github.com/your-username/fastify-chrome-native.git
-cd fastify-chrome-native
-npm install
+git clone https://github.com/mikhailsal/mcp-chrome.git
+cd mcp-chrome
+pnpm install
 ```
 
 ### Development

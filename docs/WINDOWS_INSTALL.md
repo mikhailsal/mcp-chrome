@@ -7,7 +7,7 @@ This guide covers installation and troubleshooting for Chrome MCP Server on Wind
 1. **Download the latest Chrome extension**
 
    Download it from:
-   https://github.com/hangwin/mcp-chrome/releases
+   https://github.com/mikhailsal/mcp-chrome/releases
 
 2. **Install `mcp-chrome-bridge` globally**
 

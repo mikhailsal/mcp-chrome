@@ -21,14 +21,14 @@
     "cosine-similarity",
     "vector-operations"
   ],
-  "author": "hangye",
+  "author": "mikhailsal",
   "license": "MIT",
   "devDependencies": {
     "rimraf": "^5.0.0"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/your-repo/chrome-mcp-server.git",
+    "url": "git+https://github.com/mikhailsal/mcp-chrome.git",
     "directory": "packages/wasm-simd"
   }
 }
