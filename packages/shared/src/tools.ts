@@ -961,9 +961,9 @@ export const TOOL_SCHEMAS: Tool[] = [
           description: 'Element ref from chrome_read_page (takes precedence over selector).',
         },
         value: {
-          type: ['string', 'number', 'boolean'],
+          type: 'string',
           description:
-            'Value to fill. For text inputs: string. For checkboxes/radios: boolean. For selects: option value or text.',
+            'Value to fill. For text inputs: the text string. For checkboxes: "true" or "false". For radio buttons: "true" to select. For number/range inputs: the numeric value as a string (e.g. "42"). For selects: the option value or visible text.',
         },
         tabId: {
           type: 'number',
