@@ -21,11 +21,17 @@
 
 **Post-report addendum (2026-04-25):** BUG-52 was identified and fixed after this snapshot. The summary table above remains the original 2026-03-10 count.
 
+**Post-report addendum (2026-04-25, GIF recorder revalidation):**
+
+- BUG-10 is not reproducible on the current branch. A regression test now verifies that `action="start"` followed by `action="status"` stays in `isRecording:true`.
+- BUG-11, BUG-12, BUG-32, BUG-39, BUG-40, and BUG-50 are fixed on the current branch.
+- Regression coverage was added in `app/chrome-extension/tests/browser/gif-recorder.tool.test.ts`.
+
 ---
 
 ## `chrome_gif_recorder` (7 bugs)
 
-### BUG-10 · Recording silently crashes after start · High
+### BUG-10 · Recording silently crashes after start · High — NOT REPRODUCED (2026-04-25)
 
 **Description:** `action="start"` returns `success:true, isRecording:true`. A subsequent `action="status"` immediately returns `isRecording:false`. The recording crashes silently — no error message surfaced to the user.  
 **Steps to reproduce:**
@@ -39,48 +45,62 @@
 **Actual:** `isRecording:false` immediately after start.  
 **Suggested fix:** Surface crash/error from the recording worker; return `success:false` with a reason if recording fails to initialize.
 
+**Revalidation (2026-04-25):** Not reproduced on the current branch. The fixed-FPS start path already captures the first frame eagerly and now has regression coverage to ensure `status` remains active immediately after `start`.
+
 ---
 
-### BUG-11 · `stop` breaks when `durationMs` auto-stop was used · High
+### BUG-11 · `stop` breaks when `durationMs` auto-stop was used · High — FIXED (2026-04-25)
 
 **Description:** When GIF is started with `durationMs`, it auto-stops after the duration. If the caller then issues `action="stop"`, it gets `"No recording in progress"` — the start/stop workflow is broken when `durationMs` is used. The response gives no indication that the recording already ended.  
 **Suggested fix:** After auto-stop, `action="stop"` should return the finalized GIF result (or a clear "already stopped, here is the file" message).
 
+**Fix applied (2026-04-25):** Fixed-FPS auto-stop now caches the finalized stop result. A subsequent manual `action="stop"` returns that finalized result with `alreadyStopped:true` instead of failing with `"No recording in progress"`.
+
 ---
 
-### BUG-12 · `tabId` must be consistent but not enforced or documented · High
+### BUG-12 · `tabId` must be consistent but not enforced or documented · High — FIXED (2026-04-25)
 
 **Description:** When `auto_start` is used with a specific `tabId`, all subsequent actions (`capture`, `stop`, `status`) must use the same `tabId`. However, all these actions describe `tabId` as "default: active tab", implying it's always optional. Calling `capture` without `tabId` silently fails or captures the wrong tab.  
 **Suggested fix:** After `auto_start`, persist the `tabId` internally and use it automatically for all subsequent calls, OR document that `tabId` is required and must match.
 
+**Fix applied (2026-04-25):** The recorder now persists the `auto_start` tab and automatically reuses it for `capture`, `status`, and `stop` when `tabId` is omitted. Supplying a conflicting `tabId` now returns a clear error, and the shared schema docs were updated to describe the behavior.
+
 ---
 
-### BUG-32 · Reports wall-clock time, not GIF playback duration · Medium
+### BUG-32 · Reports wall-clock time, not GIF playback duration · Medium — FIXED (2026-04-25)
 
 **Description:** The `durationMs` in the stop response is the wall-clock time the recording ran (e.g., 149720ms = ~150 seconds) rather than the actual GIF playback duration. At 5fps with 4 frames, the real playback is 800ms — not 150 seconds.  
 **Suggested fix:** Add a `playbackDurationMs` field (`frameCount / fps * 1000`) alongside or instead of wall-clock `durationMs`.
 
+**Fix applied (2026-04-25):** Stop and export responses now return playback timing explicitly via `playbackDurationMs`, preserve `durationMs` as the playback duration for compatibility, and expose the wall-clock value separately as `recordingElapsedMs`.
+
 ---
 
-### BUG-39 · `export` after `clear` — Misleading error message · Low
+### BUG-39 · `export` after `clear` — Misleading error message · Low — FIXED (2026-04-25)
 
 **Description:** Calling `action="export"` after `action="clear"` (when no recording was ever made) returns `"Use action='stop' to finish a recording first."` — but no recording was in progress. The error message guides the user to take a nonsensical action.  
 **Suggested fix:** Detect the "no data" state and return `"No GIF data available. Start a new recording first."`.
 
+**Fix applied (2026-04-25):** `action="export"` now returns `"No GIF data available. Start a new recording first."` when there is no cached GIF data.
+
 ---
 
-### BUG-40 · `durationMs` in status response is misleading · Low
+### BUG-40 · `durationMs` in status response is misleading · Low — FIXED (2026-04-25)
 
 **Description:** In the `status` response, `durationMs` represents wall-clock recording time (e.g., 28239ms = 28 seconds since start), NOT any kind of expected playback duration. The field name is ambiguous.  
 **Suggested fix:** Rename to `recordingElapsedMs` in the status response to remove ambiguity.
 
+**Fix applied (2026-04-25):** Status responses now use `recordingElapsedMs` instead of `durationMs` for both fixed-FPS and auto-capture modes.
+
 ---
 
-### BUG-50 · `enhancedRenderingEnabled` not included in status response · Low
+### BUG-50 · `enhancedRenderingEnabled` not included in status response · Low — FIXED (2026-04-25)
 
 **Description:** When `auto_start` is called with `enhancedRendering` config, the `status` response does not include `enhancedRenderingEnabled: true`. The caller cannot verify whether enhanced rendering was activated. (The flag IS computed in `getAutoCaptureStatus()` but not forwarded through the `status` case in `gif-recorder.ts`.)  
 **Code reference:** `gif-recorder.ts` line 877–891 — status case omits `enhancedRenderingEnabled` field.  
 **Suggested fix:** Add `enhancedRenderingEnabled: status.enhancedRenderingEnabled` to the status case response.
+
+**Fix applied (2026-04-25):** Auto-capture `status` now forwards `enhancedRenderingEnabled` from `getAutoCaptureStatus()`.
 
 ---
 

@@ -1233,7 +1233,7 @@ export const TOOL_SCHEMAS: Tool[] = [
         tabId: {
           type: 'number',
           description:
-            'Target tab ID (default: active tab). Used with "start"/"auto_start" for recording, and with "export" (download=false) for drag&drop upload target.',
+            'Target tab ID (default: active tab). Used with "start"/"auto_start" for recording, and with "export" (download=false) for drag&drop upload target. After "auto_start", subsequent "capture"/"status"/"stop" calls automatically reuse that tab when tabId is omitted; providing a different tabId returns an error.',
         },
         fps: {
           type: 'number',

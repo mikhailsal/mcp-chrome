@@ -111,6 +111,8 @@ interface GifResult {
   tabId?: number;
   frameCount?: number;
   durationMs?: number;
+  playbackDurationMs?: number;
+  recordingElapsedMs?: number;
   byteLength?: number;
   downloadId?: number;
   filename?: string;
@@ -118,6 +120,8 @@ interface GifResult {
   isRecording?: boolean;
   mode?: 'fixed_fps' | 'auto_capture';
   actionsCount?: number;
+  enhancedRenderingEnabled?: boolean;
+  alreadyStopped?: boolean;
   error?: string;
   // Clear action specific
   clearedAutoCapture?: boolean;
@@ -152,7 +156,8 @@ interface ExportableGif {
   width: number;
   height: number;
   frameCount: number;
-  durationMs: number;
+  playbackDurationMs: number;
+  recordingElapsedMs: number;
   tabId: number;
   filename?: string;
   actionsCount?: number;
@@ -161,8 +166,61 @@ interface ExportableGif {
 }
 let lastRecordedGif: ExportableGif | null = null;
 
+interface PendingAutoStopResult {
+  tabId: number;
+  result: GifResult;
+  createdAt: number;
+}
+let pendingAutoStopResult: PendingAutoStopResult | null = null;
+
 // Maximum cache lifetime for exportable GIF (5 minutes)
 const EXPORT_CACHE_LIFETIME_MS = 5 * 60 * 1000;
+
+function calculatePlaybackDurationMs(frameCount: number, frameDelayCs: number): number {
+  return frameCount * frameDelayCs * 10;
+}
+
+function consumePendingAutoStopResult(requestedTabId?: number): GifResult | null {
+  if (!pendingAutoStopResult) {
+    return null;
+  }
+
+  if (Date.now() - pendingAutoStopResult.createdAt > EXPORT_CACHE_LIFETIME_MS) {
+    pendingAutoStopResult = null;
+    return null;
+  }
+
+  if (typeof requestedTabId === 'number' && pendingAutoStopResult.tabId !== requestedTabId) {
+    return {
+      success: false,
+      action: 'stop',
+      error: `The most recent auto-stopped recording belongs to tab ${pendingAutoStopResult.tabId}. Omit tabId or use the matching tabId.`,
+    };
+  }
+
+  const result: GifResult = {
+    ...pendingAutoStopResult.result,
+    alreadyStopped: true,
+  };
+  pendingAutoStopResult = null;
+  return result;
+}
+
+function resolveAutoCaptureTabId(requestedTabId?: number): { tabId?: number; error?: string } {
+  const activeAutoTabId = autoCaptureMetadata?.tabId;
+
+  if (activeAutoTabId === undefined) {
+    return { tabId: requestedTabId };
+  }
+
+  if (requestedTabId !== undefined && requestedTabId !== activeAutoTabId) {
+    return {
+      error: `Auto-capture is active for tab ${activeAutoTabId}. Omit tabId or use the matching tabId.`,
+    };
+  }
+
+  return { tabId: activeAutoTabId };
+}
 
 // ============================================================================
 // Offscreen Document Communication
@@ -273,7 +331,7 @@ async function captureTick(state: RecordingState): Promise<void> {
 
   const elapsed = Date.now() - state.startTime;
   if (elapsed >= state.durationMs || state.frameCount >= state.maxFrames) {
-    await stopRecording();
+    await stopRecording('auto');
     return;
   }
 
@@ -296,7 +354,7 @@ async function captureTick(state: RecordingState): Promise<void> {
 
   const elapsedAfter = Date.now() - state.startTime;
   if (elapsedAfter >= state.durationMs || state.frameCount >= state.maxFrames) {
-    await stopRecording();
+    await stopRecording('auto');
     return;
   }
 
@@ -393,6 +451,7 @@ async function startRecording(
       action: 'start',
       tabId,
       isRecording: true,
+      mode: 'fixed_fps',
     };
   } catch (error) {
     recordingState = null;
@@ -409,7 +468,7 @@ async function startRecording(
   }
 }
 
-async function stopRecording(): Promise<GifResult> {
+async function stopRecording(reason: 'manual' | 'auto' = 'manual'): Promise<GifResult> {
   if (stopPromise) {
     return stopPromise;
   }
@@ -457,7 +516,8 @@ async function stopRecording(): Promise<GifResult> {
     }
 
     const frameCount = state.frameCount;
-    const durationMs = Date.now() - state.startTime;
+    const recordingElapsedMs = Date.now() - state.startTime;
+    const playbackDurationMs = calculatePlaybackDurationMs(frameCount, state.frameDelayCs);
     const filename = state.filename;
 
     try {
@@ -472,7 +532,9 @@ async function stopRecording(): Promise<GifResult> {
           action: 'stop' as const,
           tabId,
           frameCount,
-          durationMs,
+          durationMs: playbackDurationMs,
+          playbackDurationMs,
+          recordingElapsedMs,
           error: 'No frames captured',
         };
       }
@@ -489,7 +551,9 @@ async function stopRecording(): Promise<GifResult> {
           action: 'stop' as const,
           tabId,
           frameCount,
-          durationMs,
+          durationMs: playbackDurationMs,
+          playbackDurationMs,
+          recordingElapsedMs,
           error: 'No frames captured',
         };
       }
@@ -503,7 +567,8 @@ async function stopRecording(): Promise<GifResult> {
         width: state.width,
         height: state.height,
         frameCount,
-        durationMs,
+        playbackDurationMs,
+        recordingElapsedMs,
         tabId,
         filename,
         mode: 'fixed_fps',
@@ -537,17 +602,32 @@ async function stopRecording(): Promise<GifResult> {
         // Ignore path lookup errors
       }
 
-      return {
+      const result: GifResult = {
         success: true,
         action: 'stop' as const,
         tabId,
         frameCount,
-        durationMs,
+        durationMs: playbackDurationMs,
+        playbackDurationMs,
+        recordingElapsedMs,
         byteLength: response.byteLength ?? gifBytes.byteLength,
         downloadId,
         filename: fullFilename,
         fullPath,
+        mode: 'fixed_fps',
       };
+
+      if (reason === 'auto') {
+        pendingAutoStopResult = {
+          tabId,
+          result,
+          createdAt: Date.now(),
+        };
+      } else {
+        pendingAutoStopResult = null;
+      }
+
+      return result;
     } catch (error) {
       return {
         success: false,
@@ -584,7 +664,7 @@ function getRecordingStatus(): GifResult {
     isRecording: recordingState.isRecording,
     tabId: recordingState.tabId,
     frameCount: recordingState.frameCount,
-    durationMs: Date.now() - recordingState.startTime,
+    recordingElapsedMs: Date.now() - recordingState.startTime,
   };
 }
 
@@ -671,7 +751,7 @@ class GifRecorderTool extends BaseBrowserToolExecutor {
           );
 
           if (result.success) {
-            result.mode = 'fixed_fps';
+            pendingAutoStopResult = null;
           }
 
           return this.buildResponse(result);
@@ -737,6 +817,7 @@ class GifRecorderTool extends BaseBrowserToolExecutor {
             tabId: tab.id,
             filename: args.filename,
           };
+          pendingAutoStopResult = null;
 
           // Capture initial frame
           await captureInitialFrame(tab.id);
@@ -752,11 +833,16 @@ class GifRecorderTool extends BaseBrowserToolExecutor {
 
         case 'capture': {
           // Manual frame capture in auto mode
-          const tab = await this.resolveTargetTab(args.tabId);
+          const autoTarget = resolveAutoCaptureTabId(args.tabId);
+          if (autoTarget.error) {
+            return createErrorResponse(autoTarget.error);
+          }
+
+          const tab = await this.resolveTargetTab(autoTarget.tabId);
           if (!tab?.id) {
             return createErrorResponse(
-              typeof args.tabId === 'number'
-                ? `Tab not found: ${args.tabId}`
+              typeof autoTarget.tabId === 'number'
+                ? `Tab not found: ${autoTarget.tabId}`
                 : 'No active tab found',
             );
           }
@@ -791,7 +877,12 @@ class GifRecorderTool extends BaseBrowserToolExecutor {
         case 'stop': {
           // Stop either mode
           // Check auto-capture first
-          const autoTab = autoCaptureMetadata?.tabId;
+          const autoTarget = resolveAutoCaptureTabId(args.tabId);
+          if (autoTarget.error) {
+            return createErrorResponse(autoTarget.error);
+          }
+
+          const autoTab = autoTarget.tabId;
           if (autoTab !== undefined && isAutoCaptureActive(autoTab)) {
             const stopResult = await stopAutoCapture(autoTab);
             const filename = autoCaptureMetadata?.filename;
@@ -804,7 +895,9 @@ class GifRecorderTool extends BaseBrowserToolExecutor {
                 tabId: autoTab,
                 mode: 'auto_capture',
                 frameCount: stopResult.frameCount,
-                durationMs: stopResult.durationMs,
+                durationMs: stopResult.playbackDurationMs,
+                playbackDurationMs: stopResult.playbackDurationMs,
+                recordingElapsedMs: stopResult.recordingElapsedMs,
                 actionsCount: stopResult.actions?.length,
                 error: stopResult.error || 'No GIF data generated',
               });
@@ -816,7 +909,8 @@ class GifRecorderTool extends BaseBrowserToolExecutor {
               width: DEFAULT_WIDTH, // auto mode uses default dimensions
               height: DEFAULT_HEIGHT,
               frameCount: stopResult.frameCount ?? 0,
-              durationMs: stopResult.durationMs ?? 0,
+              playbackDurationMs: stopResult.playbackDurationMs ?? 0,
+              recordingElapsedMs: stopResult.recordingElapsedMs ?? 0,
               tabId: autoTab,
               filename,
               actionsCount: stopResult.actions?.length,
@@ -857,7 +951,9 @@ class GifRecorderTool extends BaseBrowserToolExecutor {
               tabId: autoTab,
               mode: 'auto_capture',
               frameCount: stopResult.frameCount,
-              durationMs: stopResult.durationMs,
+              durationMs: stopResult.playbackDurationMs,
+              playbackDurationMs: stopResult.playbackDurationMs,
+              recordingElapsedMs: stopResult.recordingElapsedMs,
               byteLength: stopResult.gifData.byteLength,
               actionsCount: stopResult.actions?.length,
               downloadId,
@@ -866,17 +962,26 @@ class GifRecorderTool extends BaseBrowserToolExecutor {
             });
           }
 
-          // Fall back to fixed-FPS stop
-          const result = await stopRecording();
-          if (result.success) {
-            result.mode = 'fixed_fps';
+          const pendingResult = consumePendingAutoStopResult(args.tabId);
+          if (pendingResult) {
+            return pendingResult.success
+              ? this.buildResponse(pendingResult)
+              : createErrorResponse(pendingResult.error || 'No recording in progress');
           }
+
+          // Fall back to fixed-FPS stop
+          const result = await stopRecording('manual');
           return this.buildResponse(result);
         }
 
         case 'status': {
           // Check auto-capture status first
-          const autoTab = autoCaptureMetadata?.tabId;
+          const autoTarget = resolveAutoCaptureTabId(args.tabId);
+          if (autoTarget.error) {
+            return createErrorResponse(autoTarget.error);
+          }
+
+          const autoTab = autoTarget.tabId;
           if (autoTab !== undefined && isAutoCaptureActive(autoTab)) {
             const status = getAutoCaptureStatus(autoTab);
             return this.buildResponse({
@@ -886,8 +991,9 @@ class GifRecorderTool extends BaseBrowserToolExecutor {
               isRecording: status.active,
               mode: 'auto_capture',
               frameCount: status.frameCount,
-              durationMs: status.durationMs,
+              recordingElapsedMs: status.recordingElapsedMs,
               actionsCount: status.actionsCount,
+              enhancedRenderingEnabled: status.enhancedRenderingEnabled,
             });
           }
 
@@ -909,9 +1015,9 @@ class GifRecorderTool extends BaseBrowserToolExecutor {
           const autoTab = autoCaptureMetadata?.tabId;
           if (autoTab !== undefined && isAutoCaptureActive(autoTab)) {
             await stopAutoCapture(autoTab);
-            autoCaptureMetadata = null;
             clearedAuto = true;
           }
+          autoCaptureMetadata = null;
 
           // Stop fixed-FPS recording if active or stopping
           if (recordingState) {
@@ -950,6 +1056,7 @@ class GifRecorderTool extends BaseBrowserToolExecutor {
             lastRecordedGif = null;
             clearedCache = true;
           }
+          pendingAutoStopResult = null;
 
           return this.buildResponse({
             success: true,
@@ -965,9 +1072,7 @@ class GifRecorderTool extends BaseBrowserToolExecutor {
 
           // Check if cache is valid
           if (!lastRecordedGif) {
-            return createErrorResponse(
-              'No recorded GIF available for export. Use action="stop" to finish a recording first.',
-            );
+            return createErrorResponse('No GIF data available. Start a new recording first.');
           }
 
           // Check cache expiration
@@ -1011,7 +1116,9 @@ class GifRecorderTool extends BaseBrowserToolExecutor {
               action: 'export',
               mode: lastRecordedGif.mode,
               frameCount: lastRecordedGif.frameCount,
-              durationMs: lastRecordedGif.durationMs,
+              durationMs: lastRecordedGif.playbackDurationMs,
+              playbackDurationMs: lastRecordedGif.playbackDurationMs,
+              recordingElapsedMs: lastRecordedGif.recordingElapsedMs,
               byteLength: lastRecordedGif.gifData.byteLength,
               downloadId,
               filename: fullFilename,
@@ -1173,7 +1280,9 @@ class GifRecorderTool extends BaseBrowserToolExecutor {
                 action: 'export',
                 mode: lastRecordedGif.mode,
                 frameCount: lastRecordedGif.frameCount,
-                durationMs: lastRecordedGif.durationMs,
+                durationMs: lastRecordedGif.playbackDurationMs,
+                playbackDurationMs: lastRecordedGif.playbackDurationMs,
+                recordingElapsedMs: lastRecordedGif.recordingElapsedMs,
                 byteLength: lastRecordedGif.gifData.byteLength,
                 uploadTarget: {
                   x: targetX,

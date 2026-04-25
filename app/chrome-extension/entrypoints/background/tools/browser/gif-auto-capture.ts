@@ -281,7 +281,8 @@ export async function stopAutoCapture(tabId: number): Promise<{
   success: boolean;
   gifData?: Uint8Array;
   frameCount?: number;
-  durationMs?: number;
+  playbackDurationMs?: number;
+  recordingElapsedMs?: number;
   actions?: ActionMetadata[];
   error?: string;
 }> {
@@ -297,7 +298,8 @@ export async function stopAutoCapture(tabId: number): Promise<{
     }
 
     const frameCount = state.frameCount;
-    const durationMs = Date.now() - state.startTime;
+    const recordingElapsedMs = Date.now() - state.startTime;
+    const playbackDurationMs = frameCount * state.config.frameDelayCs * 10;
     const actions = [...state.actions];
 
     if (frameCount === 0) {
@@ -305,7 +307,8 @@ export async function stopAutoCapture(tabId: number): Promise<{
         success: false,
         error: 'No frames captured',
         frameCount: 0,
-        durationMs,
+        playbackDurationMs,
+        recordingElapsedMs,
         actions,
       };
     }
@@ -323,7 +326,8 @@ export async function stopAutoCapture(tabId: number): Promise<{
         success: false,
         error: 'Failed to encode GIF',
         frameCount,
-        durationMs,
+        playbackDurationMs,
+        recordingElapsedMs,
         actions,
       };
     }
@@ -332,7 +336,8 @@ export async function stopAutoCapture(tabId: number): Promise<{
       success: true,
       gifData: new Uint8Array(response.gifData),
       frameCount,
-      durationMs,
+      playbackDurationMs,
+      recordingElapsedMs,
       actions,
     };
   } catch (error) {
@@ -364,7 +369,7 @@ export function isAutoCaptureActive(tabId: number): boolean {
 export function getAutoCaptureStatus(tabId: number): {
   active: boolean;
   frameCount?: number;
-  durationMs?: number;
+  recordingElapsedMs?: number;
   actionsCount?: number;
   enhancedRenderingEnabled?: boolean;
 } {
@@ -376,7 +381,7 @@ export function getAutoCaptureStatus(tabId: number): {
   return {
     active: true,
     frameCount: state.frameCount,
-    durationMs: Date.now() - state.startTime,
+    recordingElapsedMs: Date.now() - state.startTime,
     actionsCount: state.actions.length,
     enhancedRenderingEnabled: state.rendering.enabled,
   };
