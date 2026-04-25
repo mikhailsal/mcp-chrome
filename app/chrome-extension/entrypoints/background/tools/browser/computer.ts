@@ -75,6 +75,7 @@ interface ComputerParams {
   tabId?: number; // target existing tab id
   windowId?: number;
   background?: boolean; // avoid focusing/activating
+  coordinate?: unknown; // legacy invalid alias; handled for clearer validation errors
 }
 
 // Minimal CDP helper encapsulated here to avoid scattering CDP code
@@ -297,6 +298,11 @@ class ComputerTool extends BaseBrowserToolExecutor {
       return createErrorResponse(ERROR_MESSAGES.TAB_NOT_FOUND + ': Active tab has no ID');
     }
 
+    const legacyCoordinateError = this.validateLegacyCoordinateParam(params);
+    if (legacyCoordinateError) {
+      return legacyCoordinateError;
+    }
+
     // Helper to project coordinates using screenshot context when available
     const project = (c?: Coordinates): Coordinates | undefined => {
       if (!c) return undefined;
@@ -356,7 +362,9 @@ class ComputerTool extends BaseBrowserToolExecutor {
       case 'hover': {
         // Resolve target point from ref | selector | coordinates
         let coord: Coordinates | undefined = undefined;
+        let resolvedRef: string | undefined = params.ref;
         let resolvedBy: 'ref' | 'selector' | 'coordinates' | undefined;
+        let selectorResolutionError: string | undefined;
 
         try {
           if (params.ref) {
@@ -374,38 +382,21 @@ class ComputerTool extends BaseBrowserToolExecutor {
             });
             if (resolved && resolved.success) {
               coord = project({ x: resolved.center.x, y: resolved.center.y });
+              resolvedRef = params.ref;
               resolvedBy = 'ref';
             }
           } else if (params.selector) {
-            await this.injectContentScript(tab.id, ['inject-scripts/accessibility-tree-helper.js']);
-            const selectorType = params.selectorType || 'css';
-            const ensured = await this.sendMessageToTab(tab.id, {
-              action: TOOL_MESSAGE_TYPES.ENSURE_REF_FOR_SELECTOR,
-              selector: params.selector,
-              isXPath: selectorType === 'xpath',
-            });
-            if (ensured && ensured.success) {
-              // Scroll element into view first to ensure it's visible
-              const resolvedRef = typeof ensured.ref === 'string' ? ensured.ref : undefined;
-              if (resolvedRef) {
-                try {
-                  await this.sendMessageToTab(tab.id, { action: 'focusByRef', ref: resolvedRef });
-                } catch {
-                  // Best effort - continue even if scroll fails
-                }
-                // Re-resolve coordinates after scroll
-                const reResolved = await this.sendMessageToTab(tab.id, {
-                  action: TOOL_MESSAGE_TYPES.RESOLVE_REF,
-                  ref: resolvedRef,
-                });
-                if (reResolved && reResolved.success) {
-                  coord = project({ x: reResolved.center.x, y: reResolved.center.y });
-                } else {
-                  coord = project({ x: ensured.center.x, y: ensured.center.y });
-                }
-              } else {
-                coord = project({ x: ensured.center.x, y: ensured.center.y });
-              }
+            const selectorTarget = await this.resolveSelectorHoverTarget(
+              tab.id,
+              params.selector,
+              params.selectorType || 'css',
+              params.frameId,
+            );
+            if (selectorTarget.error) {
+              selectorResolutionError = selectorTarget.error;
+            } else {
+              coord = selectorTarget.coordinates ? project(selectorTarget.coordinates) : undefined;
+              resolvedRef = selectorTarget.ref;
               resolvedBy = 'selector';
             }
           } else if (params.coordinates) {
@@ -416,10 +407,12 @@ class ComputerTool extends BaseBrowserToolExecutor {
           // fall through to error handling below
         }
 
-        if (!coord)
+        if (!coord) {
           return createErrorResponse(
-            'Provide ref or selector or coordinates for hover, or failed to resolve target',
+            selectorResolutionError ||
+              'Provide ref or selector or coordinates for hover, or failed to resolve target',
           );
+        }
         {
           const stale = ((): any => {
             if (!params.coordinates) return null;
@@ -441,6 +434,13 @@ class ComputerTool extends BaseBrowserToolExecutor {
             return null;
           })();
           if (stale) return stale;
+        }
+
+        if (resolvedRef) {
+          const domResult = await this.domHoverFallback(tab.id, coord, resolvedBy, resolvedRef);
+          if (!domResult.isError) {
+            return domResult;
+          }
         }
 
         try {
@@ -548,12 +548,16 @@ class ComputerTool extends BaseBrowserToolExecutor {
         // Prefer DOM path via existing click tool
         const domResult = await clickTool.execute({
           coordinates: coord,
+          tabId: tab.id,
           waitForNavigation: false,
           timeout: TIMEOUTS.DEFAULT_WAIT * 5,
           button: params.action === 'right_click' ? 'right' : 'left',
           modifiers: params.modifiers,
         });
         if (!domResult.isError) {
+          if (params.action === 'left_click') {
+            await this.focusElementAtCoordinates(tab.id, coord).catch(() => {});
+          }
           return domResult; // Standardized response from click tool
         }
         // Fallback to CDP if DOM failed
@@ -933,9 +937,40 @@ class ComputerTool extends BaseBrowserToolExecutor {
           if (params.ref) {
             await clickTool.execute({
               ref: params.ref,
+              tabId: tab.id,
               waitForNavigation: false,
               timeout: TIMEOUTS.DEFAULT_WAIT * 5,
             });
+          } else if (params.coordinates) {
+            const stale = ((): any => {
+              const getHostname = (url: string): string => {
+                try {
+                  return new URL(url).hostname;
+                } catch {
+                  return '';
+                }
+              };
+              const currentHostname = getHostname(tab.url || '');
+              const ctx = screenshotContextManager.getContext(tab.id!);
+              const contextHostname = (ctx as any)?.hostname as string | undefined;
+              if (contextHostname && contextHostname !== currentHostname) {
+                return createErrorResponse(
+                  `Security check failed: Domain changed since last screenshot (from ${contextHostname} to ${currentHostname}) during type. Capture a new screenshot or use ref/selector.`,
+                );
+              }
+              return null;
+            })();
+            if (stale) return stale;
+
+            const focusResult = await clickTool.execute({
+              coordinates: project(params.coordinates),
+              tabId: tab.id,
+              waitForNavigation: false,
+              timeout: TIMEOUTS.DEFAULT_WAIT * 5,
+            });
+            if (focusResult.isError) {
+              return focusResult;
+            }
           }
           await CDPHelper.attach(tab.id);
           // Use CDP insertText to avoid complex KeyboardEvent emulation for long text
@@ -956,11 +991,14 @@ class ComputerTool extends BaseBrowserToolExecutor {
           };
         } catch (e) {
           await CDPHelper.detach(tab.id);
-          // Fallback to DOM-based keyboard tool
+          // Fallback to keyboard tool, preserving the original tab selection.
           const res = await keyboardTool.execute({
-            keys: params.text.split('').join(','),
-            delay: 0,
-            selector: undefined,
+            keys: params.text,
+            inputMode: 'text',
+            selector: params.selector,
+            selectorType: params.selectorType,
+            frameId: params.frameId,
+            tabId: tab.id,
           });
           return res;
         }
@@ -1123,15 +1161,20 @@ class ComputerTool extends BaseBrowserToolExecutor {
             );
           }
         } else {
-          const seconds = Math.max(0, Math.min((params as any).duration || 0, 30));
+          const requestedSeconds = Number((params as any).duration || 0);
+          const seconds = Math.max(0, Math.min(requestedSeconds, 30));
           if (!seconds)
             return createErrorResponse('Duration parameter is required and must be > 0');
           await new Promise((r) => setTimeout(r, seconds * 1000));
+          const warning =
+            Number.isFinite(requestedSeconds) && requestedSeconds > 30
+              ? `Duration was clamped from ${requestedSeconds}s to maximum 30s.`
+              : undefined;
           return {
             content: [
               {
                 type: 'text',
-                text: JSON.stringify({ success: true, action: 'wait', duration: seconds }),
+                text: JSON.stringify({ success: true, action: 'wait', duration: seconds, warning }),
               },
             ],
             isError: false,
@@ -1320,7 +1363,7 @@ class ComputerTool extends BaseBrowserToolExecutor {
                 text: JSON.stringify({
                   success: true,
                   action: 'hover',
-                  resolvedBy: 'ref',
+                  resolvedBy: resolvedBy || 'ref',
                   transport: 'dom-ref',
                   target: resp.target,
                 }),
@@ -1400,6 +1443,199 @@ class ComputerTool extends BaseBrowserToolExecutor {
       return createErrorResponse(
         `DOM hover fallback failed: ${error instanceof Error ? error.message : String(error)}`,
       );
+    }
+  }
+
+  private async focusElementAtCoordinates(tabId: number, coord: Coordinates): Promise<void> {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      func: (point) => {
+        const target = document.elementFromPoint(point.x, point.y);
+        if (!(target instanceof HTMLElement)) {
+          return false;
+        }
+
+        const focusTarget =
+          target.closest(
+            'input, textarea, select, button, [contenteditable="true"], [contenteditable=""], [tabindex]',
+          ) || target;
+
+        if (!(focusTarget instanceof HTMLElement)) {
+          return false;
+        }
+
+        try {
+          focusTarget.focus({ preventScroll: true });
+        } catch {
+          focusTarget.focus();
+        }
+
+        return document.activeElement === focusTarget;
+      },
+      args: [coord],
+    });
+  }
+
+  private validateLegacyCoordinateParam(params: ComputerParams): ToolResult | null {
+    if (params.coordinates || typeof params.coordinate === 'undefined') {
+      return null;
+    }
+
+    if (
+      Array.isArray(params.coordinate) &&
+      params.coordinate.length === 2 &&
+      params.coordinate.every((value) => typeof value === 'number' && Number.isFinite(value))
+    ) {
+      return createErrorResponse(
+        'Invalid parameter "coordinate". Use coordinates: { "x": N, "y": N }.',
+      );
+    }
+
+    return createErrorResponse('Invalid coordinates format. Use coordinates: { "x": N, "y": N }.');
+  }
+
+  private async resolveSelectorHoverTarget(
+    tabId: number,
+    selector: string,
+    selectorType: 'css' | 'xpath',
+    frameId?: number,
+  ): Promise<{ coordinates?: Coordinates; ref?: string; error?: string }> {
+    try {
+      await this.injectContentScript(tabId, ['inject-scripts/accessibility-tree-helper.js']);
+      const ensured = await this.sendMessageToTab(
+        tabId,
+        {
+          action: TOOL_MESSAGE_TYPES.ENSURE_REF_FOR_SELECTOR,
+          selector,
+          isXPath: selectorType === 'xpath',
+        },
+        frameId,
+      );
+
+      if (ensured && ensured.success) {
+        const ensuredRef = typeof ensured.ref === 'string' ? ensured.ref : undefined;
+        if (ensuredRef) {
+          try {
+            await this.sendMessageToTab(tabId, { action: 'focusByRef', ref: ensuredRef }, frameId);
+          } catch {
+            // Best effort; re-resolution below still handles already-visible elements.
+          }
+
+          const reResolved = await this.sendMessageToTab(
+            tabId,
+            {
+              action: TOOL_MESSAGE_TYPES.RESOLVE_REF,
+              ref: ensuredRef,
+            },
+            frameId,
+          );
+
+          if (reResolved && reResolved.success) {
+            return {
+              ref: ensuredRef,
+              coordinates: { x: reResolved.center.x, y: reResolved.center.y },
+            };
+          }
+        }
+
+        if (ensured.center) {
+          return {
+            ref: ensuredRef,
+            coordinates: { x: ensured.center.x, y: ensured.center.y },
+          };
+        }
+      }
+    } catch {
+      // Fall through to direct DOM resolution below.
+    }
+
+    try {
+      const [injection] = await chrome.scripting.executeScript({
+        target: typeof frameId === 'number' ? { tabId, frameIds: [frameId] } : { tabId },
+        world: 'MAIN',
+        func: (rawSelector, rawSelectorType) => {
+          const querySelectorDeep = (value) => {
+            try {
+              const direct = document.querySelector(value);
+              if (direct) return direct;
+            } catch {
+              return null;
+            }
+            const visited = new Set();
+            const stack = [document.documentElement];
+            while (stack.length) {
+              const node = stack.pop();
+              if (!node || visited.has(node)) continue;
+              visited.add(node);
+              try {
+                const shadowRoot = node.shadowRoot;
+                if (shadowRoot) {
+                  try {
+                    const hit = shadowRoot.querySelector(value);
+                    if (hit) return hit;
+                  } catch {}
+                  try {
+                    for (const child of shadowRoot.children || []) stack.push(child);
+                  } catch {}
+                }
+              } catch {}
+              try {
+                for (const child of node.children || []) stack.push(child);
+              } catch {}
+            }
+            return null;
+          };
+
+          const resolveTarget = () => {
+            if (rawSelectorType === 'xpath') {
+              const xpathResult = document.evaluate(
+                rawSelector,
+                document,
+                null,
+                XPathResult.FIRST_ORDERED_NODE_TYPE,
+                null,
+              );
+              return xpathResult.singleNodeValue instanceof Element
+                ? xpathResult.singleNodeValue
+                : null;
+            }
+            return querySelectorDeep(rawSelector);
+          };
+
+          const element = resolveTarget();
+          if (!(element instanceof Element)) {
+            return {
+              success: false,
+              error: `Failed to resolve hover target for selector: ${rawSelector}`,
+            };
+          }
+
+          element.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+          const rect = element.getBoundingClientRect();
+          return {
+            success: true,
+            center: {
+              x: rect.left + rect.width / 2,
+              y: rect.top + rect.height / 2,
+            },
+          };
+        },
+        args: [selector, selectorType],
+      });
+
+      const payload = injection?.result;
+      if (payload?.success && payload.center) {
+        return { coordinates: { x: payload.center.x, y: payload.center.y } };
+      }
+
+      return {
+        error: payload?.error || `Failed to resolve hover target for selector: ${selector}`,
+      };
+    } catch (error) {
+      return {
+        error: `Failed to resolve hover target for selector: ${error instanceof Error ? error.message : String(error)}`,
+      };
     }
   }
 

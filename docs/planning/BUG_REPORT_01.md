@@ -27,6 +27,12 @@
 - BUG-11, BUG-12, BUG-32, BUG-39, BUG-40, and BUG-50 are fixed on the current branch.
 - Regression coverage was added in `app/chrome-extension/tests/browser/gif-recorder.tool.test.ts`.
 
+**Post-report addendum (2026-04-25, `chrome_computer` revalidation):**
+
+- BUG-08, BUG-09, BUG-38, and BUG-46 are fixed on the current branch.
+- BUG-51 is not reproducible as originally written: `https://httpbin.org/forms/post` exposes a plain `<button>` without `type="submit"`, so `button[type=submit]` and `input[type=submit]` correctly do not match. The selector-hover fallback path was still hardened, and `selector: "button"` now revalidates successfully.
+- Regression coverage was added in `app/chrome-extension/tests/browser/computer.tool.test.ts` and `app/chrome-extension/tests/browser/screenshot.tool.test.ts`.
+
 ---
 
 ## `chrome_gif_recorder` (7 bugs)
@@ -106,7 +112,7 @@
 
 ## `chrome_computer` (5 bugs)
 
-### BUG-08 · Screenshot pixel coords ≠ viewport CSS coords · High
+### BUG-08 · Screenshot pixel coords ≠ viewport CSS coords · High — FIXED (2026-04-25)
 
 **Also affects:** `chrome_click_element`  
 **Description:** Screenshot images are captured in physical pixels (scaled by DPR=1.09375), but click coordinates must be in CSS viewport pixels. When an AI reads pixel positions from a screenshot and passes them to a click action, the click lands in the wrong place. With DPR>1, all clicks are systematically offset.  
@@ -114,9 +120,11 @@
 **Impact:** Every coordinate-based click from a screenshot is wrong by a factor of DPR.  
 **Suggested fix:** Either scale screenshots down to CSS-pixel space before returning, or introduce explicit coordinate-space docs and a transformation helper. `chrome_computer` partially handles this via `screenshotContextManager` but the mismatch persists for `chrome_click_element`.
 
+**Fix applied (2026-04-25):** Screenshot context now records the actual emitted image dimensions together with helper-derived page details, so screenshot-space coordinates taken from the returned image scale back to the correct browser viewport coordinates during `chrome_computer` actions. Revalidation used the actual saved screenshot pixels rather than pre-screenshot `read_page` coordinates, because the debugger infobar can transiently change the viewport during capture.
+
 ---
 
-### BUG-09 · `type` silently fails after `left_click` · High
+### BUG-09 · `type` silently fails after `left_click` · High — FIXED (2026-04-25)
 
 **Description:** `action="type"` after `action="left_click"` on an empty text field reports `success:true` but no text appears. The same field successfully accepts text after `action="triple_click"` (which selects then replaces). The `left_click + type` pattern is the natural usage and is not documented as broken.  
 **Steps to reproduce:**
@@ -130,22 +138,28 @@
 **Actual:** Field remains empty.  
 **Suggested fix:** Investigate focus handling after synthetic click; ensure focus is set before dispatching key events.
 
+**Fix applied (2026-04-25):** Coordinate `left_click` now explicitly focuses the clicked editable target, and the `type` fallback preserves the original `tabId` and uses text-mode keyboard input on that same tab. Revalidation confirmed `left_click` followed by `type` writes into the intended text field.
+
 ---
 
-### BUG-38 · `wait` action silently clamps `duration=60` to 30; no warning · Low
+### BUG-38 · `wait` action silently clamps `duration=60` to 30; no warning · Low — FIXED (2026-04-25)
 
 **Description:** `action="wait"` with `duration=60` is silently clamped to 30 seconds (max). The response shows `"duration":30` with no message that the original value was truncated.  
 **Suggested fix:** Add `"warning": "Duration was clamped from 60s to maximum 30s."` to the response.
 
+**Fix applied (2026-04-25):** `action="wait"` now returns a `warning` field whenever the requested duration is clamped to the 30-second maximum.
+
 ---
 
-### BUG-46 · API parameter inconsistency: `coordinate` array vs `coordinates` object · Low
+### BUG-46 · API parameter inconsistency: `coordinate` array vs `coordinates` object · Low — FIXED (2026-04-25)
 
 **Description:** Hover with an array `coordinate: [x, y]` silently fails with "Provide ref or selector or coordinates for hover." The correct form is `coordinates: { "x": N, "y": N }` (an object). The error message says "or coordinates" without explaining the required format. This is confusing given other tools use different coordinate conventions.
 
+**Fix applied (2026-04-25):** Raw MCP calls that pass `coordinate: [x, y]` now receive a format-specific validation error: `Invalid parameter "coordinate". Use coordinates: { "x": N, "y": N }.` The shared tool schema/docs were also updated to make the object shape explicit.
+
 ---
 
-### BUG-51 · Selector-based hover fails where ref-based hover works · High
+### BUG-51 · Selector-based hover fails where ref-based hover works · High — NOT REPRODUCED (2026-04-25)
 
 **Description:** `action="hover"` works when targeting the visible submit control by `ref`, but fails when targeting the same control by CSS selector. On `https://httpbin.org/forms/post`, both `button[type=submit]` and `input[type=submit]` return `"Provide ref or selector or coordinates for hover, or failed to resolve target"` even though the visible "Submit order" control is present and ref-based hover succeeds.  
 **Steps to reproduce:**
@@ -157,6 +171,8 @@
 **Expected:** Hover event dispatched to the visible submit control.  
 **Actual:** Target resolution fails.  
 **Suggested fix:** Reuse the same selector resolution path as `click`/`fill`, or surface a more specific resolution error that shows whether the selector matched zero elements or matched an unsupported target.
+
+**Revalidation (2026-04-25):** The original selectors in the report do not match the page under test. `https://httpbin.org/forms/post` exposes a plain `<button>Submit order</button>` without `type="submit"`, so both `button[type=submit]` and `input[type=submit]` correctly return no match. On the current branch, selector-based hover succeeds with the valid selector `button`, and the fallback path was hardened to surface selector-resolution failures more explicitly.
 
 ---
 

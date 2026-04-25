@@ -43,6 +43,7 @@ vi.mock('@/utils/cdp-session-manager', () => ({
 import { screenshotTool } from '@/entrypoints/background/tools/browser/screenshot';
 import { cdpSessionManager } from '@/utils/cdp-session-manager';
 import { compressImage, createImageBitmapFromUrl } from '@/utils/image-utils';
+import { screenshotContextManager } from '@/utils/screenshot-context';
 
 type ChromeTestApi = typeof globalThis.chrome & {
   downloads: {
@@ -98,8 +99,8 @@ describe('screenshotTool', () => {
       mimeType: 'image/jpeg',
     });
     vi.mocked(createImageBitmapFromUrl).mockResolvedValue({
-      width: 1024,
-      height: 768,
+      width: 717,
+      height: 538,
     } as ImageBitmap);
 
     vi.spyOn(screenshotTool as never, 'tryGetTab' as never).mockResolvedValue(undefined);
@@ -118,6 +119,15 @@ describe('screenshotTool', () => {
       mimeType: 'image/jpeg',
     });
     expect(chromeApi.downloads.download).not.toHaveBeenCalled();
+    expect(screenshotContextManager.setContext).toHaveBeenCalledWith(
+      tab.id,
+      expect.objectContaining({
+        screenshotWidth: 717,
+        screenshotHeight: 538,
+        viewportWidth: 1024,
+        viewportHeight: 768,
+      }),
+    );
   });
 
   it('still saves a PNG when explicitly requested', async () => {

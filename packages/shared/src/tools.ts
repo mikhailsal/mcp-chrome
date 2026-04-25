@@ -221,7 +221,7 @@ export const TOOL_SCHEMAS: Tool[] = [
             y: { type: 'number', description: 'Y coordinate' },
           },
           description:
-            'Coordinates for actions (in screenshot space if a recent screenshot was taken, otherwise viewport). Required for click/scroll and as end point for drag.',
+            'Coordinates object for actions (in screenshot space if a recent screenshot was taken, otherwise viewport). Required for click/scroll and as end point for drag. Use { x, y }; legacy coordinate arrays like coordinate: [x, y] are not supported.',
         },
         startCoordinates: {
           type: 'object',
@@ -311,7 +311,8 @@ export const TOOL_SCHEMAS: Tool[] = [
         },
         duration: {
           type: 'number',
-          description: 'Seconds to wait for action=wait (max 30s)',
+          description:
+            'Seconds to wait for action=wait (max 30s; larger values are clamped and reported with a warning).',
         },
       },
       required: ['action'],

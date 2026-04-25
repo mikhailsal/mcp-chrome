@@ -102,6 +102,97 @@ function assertValidPageDetails(details: unknown): ScreenshotPageDetails {
   return candidate as ScreenshotPageDetails;
 }
 
+function decodeBase64DataUrl(dataUrl: string): { mimeType: string; bytes: Uint8Array } | null {
+  const match = /^data:(image\/[^;]+);base64,(.+)$/i.exec(dataUrl);
+  if (!match) return null;
+
+  const [, mimeType, base64] = match;
+  try {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+
+    return { mimeType: mimeType.toLowerCase(), bytes };
+  } catch {
+    return null;
+  }
+}
+
+function parsePngDimensions(bytes: Uint8Array): { width: number; height: number } | null {
+  if (bytes.length < 24) return null;
+  const isPngSignature =
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a;
+  if (!isPngSignature) return null;
+
+  const width = (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19];
+  const height = (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23];
+
+  return width > 0 && height > 0 ? { width, height } : null;
+}
+
+function parseJpegDimensions(bytes: Uint8Array): { width: number; height: number } | null {
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return null;
+
+  let offset = 2;
+  while (offset + 8 < bytes.length) {
+    if (bytes[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+
+    const marker = bytes[offset + 1];
+    offset += 2;
+
+    if (marker === 0xd8 || marker === 0xd9) {
+      continue;
+    }
+
+    if (offset + 1 >= bytes.length) break;
+    const segmentLength = (bytes[offset] << 8) | bytes[offset + 1];
+    if (segmentLength < 2 || offset + segmentLength > bytes.length) break;
+
+    const isStartOfFrame =
+      (marker >= 0xc0 && marker <= 0xc3) ||
+      (marker >= 0xc5 && marker <= 0xc7) ||
+      (marker >= 0xc9 && marker <= 0xcb) ||
+      (marker >= 0xcd && marker <= 0xcf);
+    if (isStartOfFrame && segmentLength >= 7) {
+      const height = (bytes[offset + 3] << 8) | bytes[offset + 4];
+      const width = (bytes[offset + 5] << 8) | bytes[offset + 6];
+      return width > 0 && height > 0 ? { width, height } : null;
+    }
+
+    offset += segmentLength;
+  }
+
+  return null;
+}
+
+async function getImageDimensions(dataUrl: string): Promise<{ width: number; height: number }> {
+  const decoded = decodeBase64DataUrl(dataUrl);
+  if (decoded) {
+    const parsed =
+      decoded.mimeType === 'image/png'
+        ? parsePngDimensions(decoded.bytes)
+        : parseJpegDimensions(decoded.bytes);
+    if (parsed) {
+      return parsed;
+    }
+  }
+
+  const bitmap = await createImageBitmapFromUrl(dataUrl);
+  return { width: bitmap.width, height: bitmap.height };
+}
+
 /**
  * Tool for capturing screenshots of web pages
  */
@@ -145,6 +236,68 @@ class ScreenshotTool extends BaseBrowserToolExecutor {
     let originalScroll: { x: number; y: number } | null = null;
     let didPreparePage = false;
     let pageDetails: ScreenshotPageDetails | undefined;
+
+    const readLiveViewportDetails = async (): Promise<Partial<ScreenshotPageDetails> | null> => {
+      try {
+        await this.injectContentScript(tab.id!, ['inject-scripts/screenshot-helper.js']);
+        const helperDetails = await this.sendMessageToTab(tab.id!, {
+          action: TOOL_MESSAGE_TYPES.SCREENSHOT_GET_PAGE_DETAILS,
+        });
+        return assertValidPageDetails(helperDetails);
+      } catch {
+        // Fall back to a direct page probe below when helper injection is unavailable.
+      }
+
+      try {
+        const [result] = await chrome.scripting.executeScript({
+          target: { tabId: tab.id! },
+          world: 'MAIN',
+          func: () => ({
+            totalWidth: Math.max(
+              document.documentElement?.scrollWidth || 0,
+              document.body?.scrollWidth || 0,
+              window.innerWidth,
+            ),
+            totalHeight: Math.max(
+              document.documentElement?.scrollHeight || 0,
+              document.body?.scrollHeight || 0,
+              window.innerHeight,
+            ),
+            viewportWidth: window.innerWidth,
+            viewportHeight: window.innerHeight,
+            devicePixelRatio: window.devicePixelRatio || 1,
+            currentScrollX: window.scrollX,
+            currentScrollY: window.scrollY,
+          }),
+        });
+        return (result?.result as Partial<ScreenshotPageDetails> | undefined) || null;
+      } catch {
+        return null;
+      }
+    };
+
+    const updateScreenshotContext = async (imageDataUrl: string) => {
+      try {
+        const dimensions = await getImageDimensions(imageDataUrl);
+        let hostname = '';
+        try {
+          hostname = tab.url ? new URL(tab.url).hostname : '';
+        } catch {
+          // ignore
+        }
+
+        screenshotContextManager.setContext(tab.id!, {
+          screenshotWidth: dimensions.width,
+          screenshotHeight: dimensions.height,
+          viewportWidth: pageDetails?.viewportWidth ?? finalImageWidthCss ?? dimensions.width,
+          viewportHeight: pageDetails?.viewportHeight ?? finalImageHeightCss ?? dimensions.height,
+          devicePixelRatio: pageDetails?.devicePixelRatio,
+          hostname,
+        });
+      } catch (contextError) {
+        console.warn('Failed to set screenshot context:', contextError);
+      }
+    };
 
     try {
       const isSimpleViewport = !fullPage && !selector;
@@ -199,6 +352,19 @@ class ScreenshotTool extends BaseBrowserToolExecutor {
               finalImageDataUrl = `data:image/png;base64,${base64Data}`;
               finalImageWidthCss = Math.round(viewport.clientWidth || 800);
               finalImageHeightCss = Math.round(viewport.clientHeight || 600);
+
+              const liveViewport = await readLiveViewportDetails();
+              if (liveViewport?.viewportWidth && liveViewport?.viewportHeight) {
+                pageDetails = {
+                  totalWidth: liveViewport.totalWidth ?? liveViewport.viewportWidth,
+                  totalHeight: liveViewport.totalHeight ?? liveViewport.viewportHeight,
+                  viewportWidth: liveViewport.viewportWidth,
+                  viewportHeight: liveViewport.viewportHeight,
+                  devicePixelRatio: liveViewport.devicePixelRatio ?? 1,
+                  currentScrollX: liveViewport.currentScrollX ?? 0,
+                  currentScrollY: liveViewport.currentScrollY ?? 0,
+                };
+              }
             } finally {
               if (wantResize) {
                 await cdpSessionManager
@@ -296,30 +462,6 @@ class ScreenshotTool extends BaseBrowserToolExecutor {
       }
 
       // 2. Process output
-      // Update screenshot context for coordinate scaling by tools like chrome_computer
-      try {
-        if (typeof finalImageWidthCss === 'number' && typeof finalImageHeightCss === 'number') {
-          let hostname = '';
-          try {
-            hostname = tab.url ? new URL(tab.url).hostname : '';
-          } catch {
-            // ignore
-          }
-          // Use pageDetails if available, otherwise fall back to final image dimensions
-          const viewportWidth = pageDetails?.viewportWidth ?? finalImageWidthCss;
-          const viewportHeight = pageDetails?.viewportHeight ?? finalImageHeightCss;
-          screenshotContextManager.setContext(tab.id!, {
-            screenshotWidth: finalImageWidthCss,
-            screenshotHeight: finalImageHeightCss,
-            viewportWidth,
-            viewportHeight,
-            devicePixelRatio: pageDetails?.devicePixelRatio,
-            hostname,
-          });
-        }
-      } catch (e) {
-        console.warn('Failed to set screenshot context:', e);
-      }
       if (storeBase64 === true) {
         // Compress image for base64 output to reduce size
         const compressed = await compressImage(finalImageDataUrl, {
@@ -327,6 +469,8 @@ class ScreenshotTool extends BaseBrowserToolExecutor {
           quality: 0.8, // 80% quality for good balance
           format: 'image/jpeg', // JPEG for better compression
         });
+
+        await updateScreenshotContext(compressed.dataUrl);
 
         // Include base64 data in response (without prefix)
         const base64Data = compressed.dataUrl.replace(/^data:image\/[^;]+;base64,/, '');
@@ -342,6 +486,8 @@ class ScreenshotTool extends BaseBrowserToolExecutor {
           isError: false,
         };
       }
+
+      await updateScreenshotContext(finalImageDataUrl);
 
       if (savePng === true) {
         // Save PNG file to downloads
