@@ -115,9 +115,9 @@ class ScreenshotTool extends BaseBrowserToolExecutor {
     const {
       name = 'screenshot',
       selector,
-      storeBase64 = false,
+      storeBase64 = true,
       fullPage = false,
-      savePng = true,
+      savePng = false,
     } = args;
 
     console.log(`Starting screenshot with options:`, args);

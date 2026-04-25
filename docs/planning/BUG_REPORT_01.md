@@ -19,6 +19,8 @@
 
 **10 bugs resolved and removed since initial report:** BUG-01, BUG-03, BUG-04, BUG-05, BUG-06, BUG-17, BUG-18, BUG-19, BUG-21, BUG-23.
 
+**Post-report addendum (2026-04-25):** BUG-52 was identified and fixed after this snapshot. The summary table above remains the original 2026-03-10 count.
+
 ---
 
 ## `chrome_gif_recorder` (7 bugs)
@@ -173,7 +175,7 @@ These are not page messages and pollute every result.
 
 ---
 
-## `chrome_screenshot` (3 bugs)
+## `chrome_screenshot` (4 bugs)
 
 ### BUG-20 · `fullPage` + `background` — silently ignores `fullPage` · Medium
 
@@ -186,6 +188,21 @@ These are not page messages and pollute every result.
 
 **Description:** Screenshots taken immediately after navigation show loading spinners / incomplete content. There is no built-in wait mechanism and no warning in the response that the page may not be fully loaded.  
 **Suggested fix:** Add optional `waitForLoad:true` parameter, or add a `"pageStatus":"loading"` field to warn callers.
+
+---
+
+### BUG-52 · Default screenshot response saves a file instead of returning MCP image content · Medium — FIXED (2026-04-25)
+
+**Description:** Calling `chrome_screenshot` without `storeBase64`/`savePng` flags returns saved-file metadata such as `fileSaved:true`, `filename`, and `fullPath`, with `base64:null`. Callers that simply ask for a screenshot receive a Downloads path instead of MCP `ImageContent`, which breaks the expected default visual workflow.  
+**Steps to reproduce:**
+
+```json
+{ "tabId": 187468189 }
+```
+
+**Expected:** Screenshot returned as MCP `ImageContent` by default; file saving happens only when explicitly requested.  
+**Actual:** PNG is saved to Downloads and the response is text metadata for the saved file.  
+**Fix applied:** Defaulted the runtime executor and shared tool schema/docs to `storeBase64:true` and `savePng:false`, preserving file output only for explicit opt-in.
 
 ---
 

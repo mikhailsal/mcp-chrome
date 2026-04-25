@@ -483,8 +483,9 @@ export const TOOL_SCHEMAS: Tool[] = [
         height: { type: 'number', description: 'Height in pixels (default: 600)' },
         storeBase64: {
           type: 'boolean',
+          default: true,
           description:
-            'Return screenshot as MCP ImageContent (type: image) with base64 data and mimeType (default: false). Set to true when you want to see/analyze the page visually.',
+            'Return screenshot as MCP ImageContent (type: image) with base64 data and mimeType (default: true). Disable this only when you explicitly want a downloaded PNG file instead.',
         },
         fullPage: {
           type: 'boolean',
@@ -493,8 +494,9 @@ export const TOOL_SCHEMAS: Tool[] = [
         },
         savePng: {
           type: 'boolean',
+          default: false,
           description:
-            'Save screenshot as PNG file (default: true)，if you want to see the page, recommend set this to be false, and set storeBase64 to be true',
+            'Save screenshot as a PNG file in Downloads (default: false). Set this to true when you want a file saved instead of relying on MCP ImageContent output.',
         },
       },
       required: [],

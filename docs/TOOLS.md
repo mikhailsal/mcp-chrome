@@ -134,8 +134,9 @@ Take advanced screenshots with various options.
 - `background` (boolean, optional): Attempt capture without bringing tab/window to foreground (viewport-only uses CDP)
 - `width` (number, optional): Width in pixels (default: 800)
 - `height` (number, optional): Height in pixels (default: 600)
-- `storeBase64` (boolean, optional): Return base64 data (default: false)
-- `fullPage` (boolean, optional): Capture full page (default: true)
+- `storeBase64` (boolean, optional): Return MCP image content with base64 data (default: true)
+- `fullPage` (boolean, optional): Capture full page (default: false)
+- `savePng` (boolean, optional): Save the screenshot to Downloads as a PNG file (default: false)
 
 **Example**:
 
@@ -149,7 +150,7 @@ Take advanced screenshots with various options.
 }
 ```
 
-**Response** (when `storeBase64: true`):
+**Response** (default, or when `storeBase64: true`):
 
 Returns MCP `ImageContent` — the image is returned as a native MCP image block, directly renderable by VS Code, Cursor, and other MCP-compatible clients:
 
@@ -166,7 +167,7 @@ Returns MCP `ImageContent` — the image is returned as a native MCP image block
 }
 ```
 
-**Response** (when `savePng: true` or default):
+**Response** (when `savePng: true` and `storeBase64: false`):
 
 Returns text with metadata about the saved file:
 
