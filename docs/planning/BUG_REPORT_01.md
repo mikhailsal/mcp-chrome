@@ -13,11 +13,11 @@
 | --------- | ------ |
 | Critical  | 1      |
 | High      | 8      |
-| Medium    | 15     |
+| Medium    | 14     |
 | Low       | 16     |
-| **Total** | **40** |
+| **Total** | **39** |
 
-**9 bugs resolved and removed since initial report:** BUG-01, BUG-03, BUG-04, BUG-05, BUG-06, BUG-17, BUG-18, BUG-19, BUG-21.
+**10 bugs resolved and removed since initial report:** BUG-01, BUG-03, BUG-04, BUG-05, BUG-06, BUG-17, BUG-18, BUG-19, BUG-21, BUG-23.
 
 ---
 
@@ -82,7 +82,7 @@
 
 ---
 
-## `chrome_computer` (6 bugs)
+## `chrome_computer` (5 bugs)
 
 ### BUG-08 · Screenshot pixel coords ≠ viewport CSS coords · High
 
@@ -107,22 +107,6 @@
 **Expected:** "Hello" typed into the field.  
 **Actual:** Field remains empty.  
 **Suggested fix:** Investigate focus handling after synthetic click; ensure focus is set before dispatching key events.
-
----
-
-### BUG-23 · `screenshot` action ignores `tabId`; always captures active tab · Medium
-
-**Description:** `action="screenshot"` internally calls `screenshotTool.execute()` without forwarding the resolved `tab.id`. It captures whatever the focused window's active tab is, ignoring the `tabId` parameter passed to `chrome_computer`. This also bypasses the special-page restriction indirectly: calling `chrome_computer screenshot` with a `chrome://` tab ID does not fail on that page, because the tool silently captures some other active normal tab instead.  
-**Steps to reproduce:**
-
-```json
-{ "action": "screenshot", "tabId": <background-tab-id> }
-```
-
-**Expected:** Screenshot of the specified background tab.  
-**Actual:** Screenshot of the active tab in the focused window. When the requested tab is `chrome://extensions`, the tool still returns a screenshot of an unrelated regular tab instead of a security error.  
-**Code reference:** `computer.ts` line 1285 — `screenshotTool.execute({ name: 'computer', storeBase64: true, fullPage: false })` — no `tabId` passed.  
-**Suggested fix:** Pass `tabId: tab.id` to `screenshotTool.execute()`.
 
 ---
 

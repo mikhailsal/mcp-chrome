@@ -1286,6 +1286,7 @@ class ComputerTool extends BaseBrowserToolExecutor {
           name: 'computer',
           storeBase64: true,
           fullPage: false,
+          tabId: tab.id,
         });
         return result;
       }
