@@ -25,6 +25,28 @@ interface NavigateToolParams {
 class NavigateTool extends BaseBrowserToolExecutor {
   name = TOOL_NAMES.BROWSER.NAVIGATE;
 
+  private async resolveTabActivation(
+    desiredActivation: boolean,
+    focusWindow: boolean,
+    windowId?: number,
+  ): Promise<boolean> {
+    if (!desiredActivation) {
+      return false;
+    }
+
+    if (focusWindow || typeof windowId !== 'number') {
+      return desiredActivation;
+    }
+
+    try {
+      const targetWindow = await chrome.windows.get(windowId, { populate: false });
+      return targetWindow.focused === true;
+    } catch (error) {
+      console.warn('[NavigateTool] Failed to resolve window focus state for activation:', error);
+      return desiredActivation;
+    }
+  }
+
   /**
    * Trigger GIF auto-capture after successful navigation
    */
@@ -54,9 +76,9 @@ class NavigateTool extends BaseBrowserToolExecutor {
 
     // Focus semantics:
     //   background=true  → skip ALL focus changes (no tab activation, no window focus)
-    //   background=false (default) → activate tab within window, but do NOT bring window to front
+    //   background=false (default) → activate tab only when the target Chrome window is already focused
     //   focusWindow=true → also bring the window to OS foreground (on top of all apps)
-    const shouldActivateTab = background !== true;
+    const shouldAttemptTabActivation = background !== true;
     const shouldFocusWindow = background !== true && focusWindowParam === true;
 
     console.log(
@@ -113,6 +135,11 @@ class NavigateTool extends BaseBrowserToolExecutor {
           return createErrorResponse('No target tab found for history navigation');
         }
 
+        const shouldActivateTab = await this.resolveTabActivation(
+          shouldAttemptTabActivation,
+          shouldFocusWindow,
+          targetTab.windowId,
+        );
         await this.ensureFocus(targetTab, {
           activate: shouldActivateTab,
           focusWindow: shouldFocusWindow,
@@ -158,6 +185,11 @@ class NavigateTool extends BaseBrowserToolExecutor {
           return createErrorResponse(`Tab with ID ${tabId} not found`);
         }
         await chrome.tabs.update(explicitTab.id, { url });
+        const shouldActivateTab = await this.resolveTabActivation(
+          shouldAttemptTabActivation,
+          shouldFocusWindow,
+          explicitTab.windowId,
+        );
         await this.ensureFocus(explicitTab, {
           activate: shouldActivateTab,
           focusWindow: shouldFocusWindow,
@@ -303,6 +335,11 @@ class NavigateTool extends BaseBrowserToolExecutor {
         console.log(
           `URL already open in Tab ID: ${existingTab.id}, Window ID: ${existingTab.windowId}`,
         );
+        const shouldActivateTab = await this.resolveTabActivation(
+          shouldAttemptTabActivation,
+          shouldFocusWindow,
+          existingTab.windowId,
+        );
         await this.ensureFocus(existingTab, {
           activate: shouldActivateTab,
           focusWindow: shouldFocusWindow,
@@ -390,6 +427,12 @@ class NavigateTool extends BaseBrowserToolExecutor {
 
         if (targetWindow && targetWindow.id !== undefined) {
           console.log(`Found target Window ID: ${targetWindow.id}`);
+
+          const shouldActivateTab = await this.resolveTabActivation(
+            shouldAttemptTabActivation,
+            shouldFocusWindow,
+            targetWindow.id,
+          );
 
           const newTab = await chrome.tabs.create({
             url: url,

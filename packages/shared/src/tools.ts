@@ -398,7 +398,7 @@ export const TOOL_SCHEMAS: Tool[] = [
     name: TOOL_NAMES.BROWSER.NAVIGATE,
     description:
       'Navigate to a URL, refresh the current tab, or navigate browser history (back/forward). ' +
-      'IMPORTANT behavior notes: (1) By default, the tab is activated within its window but the browser window is NOT brought to the foreground (non-disruptive to the user). ' +
+      'IMPORTANT behavior notes: (1) By default, the tab is activated only when its target Chrome window is already focused; if Chrome is in the background, navigation stays non-disruptive and does not raise the window. ' +
       'Set focusWindow=true to also bring the window to the foreground. Set background=true to skip tab activation entirely. ' +
       '(2) If a tab with the same URL already exists and no tabId/newWindow/width/height is specified, that tab is reused AND automatically reloaded to ensure fresh content. ' +
       'Check the "action" field in the response to see exactly what happened (e.g. "reused_and_reloaded", "created_new_tab", "created_new_window", "navigated", "refreshed", "history_back", "history_forward").',
