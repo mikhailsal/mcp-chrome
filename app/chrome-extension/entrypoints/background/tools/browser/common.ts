@@ -25,6 +25,21 @@ interface NavigateToolParams {
 class NavigateTool extends BaseBrowserToolExecutor {
   name = TOOL_NAMES.BROWSER.NAVIGATE;
 
+  private shouldQueryExistingTabs(url: string): boolean {
+    if (url === 'about:blank') {
+      return false;
+    }
+
+    try {
+      const parsed = new URL(url);
+      return (
+        parsed.protocol === 'http:' || parsed.protocol === 'https:' || parsed.protocol === 'file:'
+      );
+    } catch {
+      return false;
+    }
+  }
+
   private async resolveTabActivation(
     desiredActivation: boolean,
     focusWindow: boolean,
@@ -255,9 +270,14 @@ class NavigateTool extends BaseBrowserToolExecutor {
         return Array.from(patterns);
       };
 
-      const urlPatterns = buildUrlPatterns(url);
-      const candidateTabs = await chrome.tabs.query({ url: urlPatterns });
-      console.log(`Found ${candidateTabs.length} matching tabs with patterns:`, urlPatterns);
+      const candidateTabs = this.shouldQueryExistingTabs(url)
+        ? await (async () => {
+            const urlPatterns = buildUrlPatterns(url);
+            const tabs = await chrome.tabs.query({ url: urlPatterns });
+            console.log(`Found ${tabs.length} matching tabs with patterns:`, urlPatterns);
+            return tabs;
+          })()
+        : [];
 
       // Prefer strict match when user specifies a concrete path/query.
       // Only fall back to host-level activation when the target is site root.
@@ -401,7 +421,9 @@ class NavigateTool extends BaseBrowserToolExecutor {
                   success: true,
                   action: 'created_new_window',
                   message: 'Opened URL in new window',
+                  tabId: firstTab?.id,
                   windowId: newWindow.id,
+                  url,
                   tabs: newWindow.tabs
                     ? newWindow.tabs.map((tab) => ({
                         tabId: tab.id,
@@ -495,7 +517,9 @@ class NavigateTool extends BaseBrowserToolExecutor {
                     success: true,
                     action: 'created_new_window',
                     message: 'Opened URL in new window',
+                    tabId: firstTab?.id,
                     windowId: fallbackWindow.id,
+                    url,
                     tabs: fallbackWindow.tabs
                       ? fallbackWindow.tabs.map((tab) => ({
                           tabId: tab.id,

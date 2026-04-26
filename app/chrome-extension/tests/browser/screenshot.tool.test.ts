@@ -137,4 +137,46 @@ describe('screenshotTool', () => {
     expect(chromeApi.downloads.download).toHaveBeenCalledTimes(1);
     expect(result.content[0].type).toBe('text');
   });
+
+  it('adds a warning when full-page capture hides fixed or sticky elements', async () => {
+    vi.spyOn(screenshotTool as never, 'injectContentScript' as never).mockResolvedValue(undefined);
+    vi.spyOn(screenshotTool as never, 'sendMessageToTab' as never).mockImplementation(
+      async (_tabId: number, message: { action: string }) => {
+        if (message.action === 'preparePageForCapture') {
+          return { success: true, hiddenFixedElementCount: 2 };
+        }
+        if (message.action === 'getPageDetails') {
+          return {
+            totalWidth: 1024,
+            totalHeight: 3000,
+            viewportWidth: 1024,
+            viewportHeight: 768,
+            devicePixelRatio: 1,
+            currentScrollX: 0,
+            currentScrollY: 0,
+          };
+        }
+        if (message.action === 'resetPageAfterCapture') {
+          return { success: true };
+        }
+        return null;
+      },
+    );
+    vi.spyOn(screenshotTool as never, '_captureFullPage' as never).mockResolvedValue(
+      'data:image/png;base64,full-page-data',
+    );
+
+    const result = await screenshotTool.execute({ fullPage: true });
+
+    expect(result.isError).toBe(false);
+    expect(result.content[0]).toEqual({
+      type: 'image',
+      data: 'compressed-image-data',
+      mimeType: 'image/jpeg',
+    });
+    expect(result.content[1]).toEqual({
+      type: 'text',
+      text: expect.stringContaining('Full-page screenshot hid 2 fixed/sticky elements'),
+    });
+  });
 });

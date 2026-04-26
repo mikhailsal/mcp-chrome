@@ -409,7 +409,7 @@ export const TOOL_SCHEMAS: Tool[] = [
         url: {
           type: 'string',
           description:
-            'URL to navigate to. Special values: "back" or "forward" to navigate browser history in the target tab.',
+            'URL to navigate to. Standard web URLs, file URLs, and about:blank are supported. Special values: "back" or "forward" to navigate browser history in the target tab.',
         },
         newWindow: {
           type: 'boolean',
@@ -491,7 +491,7 @@ export const TOOL_SCHEMAS: Tool[] = [
         fullPage: {
           type: 'boolean',
           description:
-            'Capture the entire scrollable page (default: false). Uses content script injection which requires host permissions to be granted to the extension. If omitted or false, only the visible viewport is captured via CDP (works on any tab including background tabs, no host permissions needed).',
+            'Capture the entire scrollable page (default: false). Uses content script injection which requires host permissions to be granted to the extension. If fixed/sticky elements are temporarily hidden to avoid duplicated overlays during stitching, the tool returns a warning so callers can fall back to a viewport screenshot when exact fixed UI preservation matters. If omitted or false, only the visible viewport is captured via CDP (works on any tab including background tabs, no host permissions needed).',
         },
         savePng: {
           type: 'boolean',

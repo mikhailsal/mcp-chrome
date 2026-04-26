@@ -33,6 +33,14 @@
 - BUG-51 is not reproducible as originally written: `https://httpbin.org/forms/post` exposes a plain `<button>` without `type="submit"`, so `button[type=submit]` and `input[type=submit]` correctly do not match. The selector-hover fallback path was still hardened, and `selector: "button"` now revalidates successfully.
 - Regression coverage was added in `app/chrome-extension/tests/browser/computer.tool.test.ts` and `app/chrome-extension/tests/browser/screenshot.tool.test.ts`.
 
+**Post-report addendum (2026-04-26, `chrome_screenshot` / `chrome_navigate` revalidation):**
+
+- BUG-29 and BUG-35 are fixed on the current branch.
+- BUG-47 is fixed by surfacing an explicit warning whenever full-page capture hides fixed/sticky elements during stitching.
+- BUG-20 is not reproducible as originally written on the current branch: fresh-tab `fullPage:true` captures still returned tall full-page images. A separate background-tab capture issue was observed during verification and should be tracked independently.
+- BUG-49 is not reproducible as originally written on the current branch because real MCP history traversal currently fails earlier with `Cannot find a next page in history`, so the missing-`finalUrl` response shape could not be revalidated.
+- Regression coverage was added in `app/chrome-extension/tests/browser/navigate.tool.test.ts` and `app/chrome-extension/tests/browser/screenshot.tool.test.ts`.
+
 ---
 
 ## `chrome_gif_recorder` (7 bugs)
@@ -211,19 +219,14 @@ These are not page messages and pollute every result.
 
 ---
 
-## `chrome_screenshot` (4 bugs)
+## `chrome_screenshot` (2 bugs)
 
-### BUG-20 · `fullPage` + `background` — silently ignores `fullPage` · Medium
+### BUG-20 · `fullPage` + `background` — silently ignores `fullPage` · Medium — NOT REPRODUCED (2026-04-26)
 
 **Description:** `fullPage:true` with `background:true` silently falls back to viewport-only capture. No warning in the response. Users expect a full-page screenshot.  
 **Suggested fix:** Return a warning field `{ "warning": "fullPage is not supported with background=true; viewport-only screenshot captured." }` or implement full-page CDP capture.
 
----
-
-### BUG-22 · No wait-for-load; captures loading spinners · Medium
-
-**Description:** Screenshots taken immediately after navigation show loading spinners / incomplete content. There is no built-in wait mechanism and no warning in the response that the page may not be fully loaded.  
-**Suggested fix:** Add optional `waitForLoad:true` parameter, or add a `"pageStatus":"loading"` field to warn callers.
+**Revalidation (2026-04-26):** Not reproduced as originally written. On fresh tabs, `fullPage:true` continued to return tall full-page captures rather than viewport-only output. During verification on a background tab, a different issue was observed where Chrome stitched the visible tab instead of the requested background tab; that behavior does not match this original report and should be tracked separately.
 
 ---
 
@@ -242,33 +245,41 @@ These are not page messages and pollute every result.
 
 ---
 
-### BUG-47 · `fullPage=true` corrupts fixed-position elements · Low
+### BUG-47 · `fullPage=true` corrupts fixed-position elements · Low — FIXED (2026-04-26)
 
 **Description:** For pages with fixed sidebars or navbars, `fullPage:true` produces screenshots where fixed-position elements disappear or reposition incorrectly. The viewport screenshot shows them correctly; the full-page version does not.  
 **Suggested fix:** Document that full-page capture may distort fixed/sticky elements, or restore them after scrolled capture.
+
+**Fix applied (2026-04-26):** Full-page capture now returns an explicit `warnings` array whenever fixed/sticky elements are temporarily hidden during stitching, so callers can detect the distortion risk and fall back to a viewport screenshot when they need exact fixed-UI preservation. Regression coverage was added in `app/chrome-extension/tests/browser/screenshot.tool.test.ts`.
 
 ---
 
 ## `chrome_navigate` (3 bugs)
 
-### BUG-29 · `newWindow` — Response schema differs between modes · Medium
+### BUG-29 · `newWindow` — Response schema differs between modes · Medium — FIXED (2026-04-26)
 
 **Description:** `newWindow:false` response has `tabId` at the top level; `newWindow:true` response has `tabId` nested inside `tabs[0].tabId`. Consuming code must branch on which mode was used.  
 **Suggested fix:** Normalize: always include `tabId` at the top level in all navigate responses.
 
+**Fix applied (2026-04-26):** `newWindow:true` responses now include a top-level `tabId` for the created tab while preserving the existing `tabs` array for compatibility. Regression coverage was added in `app/chrome-extension/tests/browser/navigate.tool.test.ts`.
+
 ---
 
-### BUG-35 · `about:blank` — Exposes internal URL pattern in error · Low
+### BUG-35 · `about:blank` — Exposes internal URL pattern in error · Low — FIXED (2026-04-26)
 
 **Description:** Navigating to `about:blank` returns `"Error navigating to URL: Invalid url pattern 'about:///*'"` — exposing an internal URL validation pattern to the user.  
-**Suggested fix:** Catch this case; either allow `about:blank` or return `"URL scheme 'about:' is not supported."`.
+**Suggested fix:** allow about:blank as a valid URL. also allow ip addresses, localhost, and other common testing URLs.
+
+**Fix applied (2026-04-26):** `about:blank` now bypasses match-pattern tab lookup and is treated as a valid navigation target, so the internal `about:///*` validation detail is no longer exposed. Regression coverage was added in `app/chrome-extension/tests/browser/navigate.tool.test.ts`.
 
 ---
 
-### BUG-49 · `back`/`forward` don't confirm the resulting URL in response · Low
+### BUG-49 · `back`/`forward` don't confirm the resulting URL in response · Low — NOT REPRODUCED (2026-04-26)
 
 **Description:** After `action="back"` or `action="forward"`, the response doesn't include the URL the tab ended up on. The caller is left unaware of the current URL state.  
 **Suggested fix:** Include `finalUrl` in the navigation response for history traversal actions.
+
+**Revalidation (2026-04-26):** Not reproduced as originally written because real MCP history traversal currently fails earlier with `Cannot find a next page in history`, including on tabs with normal link-based navigation history. Since the navigation action did not succeed, the missing-`finalUrl` response shape could not be observed on the current branch.
 
 ---
 

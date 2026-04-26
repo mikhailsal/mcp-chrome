@@ -57,6 +57,11 @@ interface ScreenshotToolParams {
   maxHeight?: number; // Maximum height to capture in pixels (for infinite scroll pages)
 }
 
+interface ScreenshotPrepareResponse {
+  success: boolean;
+  hiddenFixedElementCount?: number;
+}
+
 /** Page details returned by screenshot-helper content script */
 interface ScreenshotPageDetails {
   totalWidth: number;
@@ -199,6 +204,10 @@ async function getImageDimensions(dataUrl: string): Promise<{ width: number; hei
 class ScreenshotTool extends BaseBrowserToolExecutor {
   name = TOOL_NAMES.BROWSER.SCREENSHOT;
 
+  private buildFixedElementWarning(count: number): string {
+    return `Full-page screenshot hid ${count} fixed/sticky element${count === 1 ? '' : 's'} to avoid duplicated overlays while stitching. Use a viewport screenshot if you need fixed UI preserved exactly.`;
+  }
+
   /**
    * Execute screenshot operation
    */
@@ -233,6 +242,7 @@ class ScreenshotTool extends BaseBrowserToolExecutor {
     let finalImageWidthCss: number | undefined;
     let finalImageHeightCss: number | undefined;
     const results: any = { base64: null, fileSaved: false };
+    const warnings: string[] = [];
     let originalScroll: { x: number; y: number } | null = null;
     let didPreparePage = false;
     let pageDetails: ScreenshotPageDetails | undefined;
@@ -398,14 +408,17 @@ class ScreenshotTool extends BaseBrowserToolExecutor {
         await new Promise((resolve) => setTimeout(resolve, SCREENSHOT_CONSTANTS.SCRIPT_INIT_DELAY));
 
         // Prepare page (hide scrollbars, handle fixed elements)
-        const prepareResp = await this.sendMessageToTab(tab.id!, {
+        const prepareResp = (await this.sendMessageToTab(tab.id!, {
           action: TOOL_MESSAGE_TYPES.SCREENSHOT_PREPARE_PAGE_FOR_CAPTURE,
           options: { fullPage },
-        });
+        })) as ScreenshotPrepareResponse | null;
         if (!prepareResp || prepareResp.success !== true) {
           throw new Error(
             'Screenshot helper did not acknowledge page preparation. The content script may not be injected or cannot run on this page.',
           );
+        }
+        if (fullPage && (prepareResp.hiddenFixedElementCount || 0) > 0) {
+          warnings.push(this.buildFixedElementWarning(prepareResp.hiddenFixedElementCount || 0));
         }
         didPreparePage = true;
 
@@ -482,6 +495,10 @@ class ScreenshotTool extends BaseBrowserToolExecutor {
               data: base64Data,
               mimeType: compressed.mimeType,
             },
+            ...warnings.map((warning) => ({
+              type: 'text' as const,
+              text: warning,
+            })),
           ],
           isError: false,
         };
@@ -563,6 +580,7 @@ class ScreenshotTool extends BaseBrowserToolExecutor {
             tabId: tab.id,
             url: tab.url,
             name: name,
+            warnings: warnings.length ? warnings : undefined,
             ...results,
           }),
         },

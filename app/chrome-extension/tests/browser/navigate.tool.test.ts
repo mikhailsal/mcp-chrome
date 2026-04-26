@@ -94,4 +94,30 @@ describe('navigateTool focus behavior', () => {
     });
     expect(chromeApi.windows.update).toHaveBeenCalledWith(9, { focused: true });
   });
+
+  it('includes a top-level tabId when creating a new window', async () => {
+    const result = await navigateTool.execute({
+      url: 'https://example.com/new-window',
+      newWindow: true,
+    });
+
+    expect(result.isError).toBe(false);
+    const payload = JSON.parse(String(result.content[0]?.text || '{}'));
+    expect(payload.action).toBe('created_new_window');
+    expect(payload.tabId).toBe(101);
+    expect(payload.windowId).toBe(9);
+    expect(payload.url).toBe('https://example.com/new-window');
+  });
+
+  it('treats about:blank as a valid navigation target without querying URL patterns', async () => {
+    const result = await navigateTool.execute({ url: 'about:blank' });
+
+    expect(result.isError).toBe(false);
+    expect(chromeApi.tabs.query).not.toHaveBeenCalled();
+    expect(chromeApi.tabs.create).toHaveBeenCalledWith({
+      url: 'about:blank',
+      windowId: 9,
+      active: false,
+    });
+  });
 });

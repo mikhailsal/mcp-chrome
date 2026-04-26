@@ -49,6 +49,7 @@ if (window.__SCREENSHOT_HELPER_INITIALIZED__) {
     hiddenFixedElements.forEach((item) => {
       item.element.style.display = 'none';
     });
+    return hiddenFixedElements.length;
   }
 
   /**
@@ -73,13 +74,14 @@ if (window.__SCREENSHOT_HELPER_INITIALIZED__) {
     else if (request.action === 'preparePageForCapture') {
       originalOverflowStyle = document.documentElement.style.overflow;
       document.documentElement.style.overflow = 'hidden'; // Hide main scrollbar
+      let hiddenFixedElementCount = 0;
       if (request.options?.fullPage) {
         // Only hide fixed elements for full page to avoid flicker
-        hideFixedElements();
+        hiddenFixedElementCount = hideFixedElements();
       }
       // Give styles a moment to apply
       setTimeout(() => {
-        sendResponse({ success: true });
+        sendResponse({ success: true, hiddenFixedElementCount });
       }, 50);
       return true; // Async response
     }
