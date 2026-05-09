@@ -648,6 +648,17 @@ class NetworkCaptureStartTool extends BaseBrowserToolExecutor {
       // Record end time
       captureInfo.endTime = Date.now();
 
+      // Re-read tab URL/title at stop time to reflect any navigation during capture
+      let currentTabUrl = captureInfo.tabUrl;
+      let currentTabTitle = captureInfo.tabTitle;
+      try {
+        const tab = await chrome.tabs.get(tabId);
+        currentTabUrl = tab.url || currentTabUrl;
+        currentTabTitle = tab.title || currentTabTitle;
+      } catch {
+        // Tab may have closed; use start-time values
+      }
+
       // Extract common request and response headers
       const requestsArray = Object.values(captureInfo.requests);
       const commonRequestHeaders = this.analyzeCommonHeaders(requestsArray, 'requestHeaders');
@@ -703,8 +714,9 @@ class NetworkCaptureStartTool extends BaseBrowserToolExecutor {
         requestCount: processedRequests.length,
         totalRequestsReceived: this.requestCounters.get(tabId) || 0,
         requestLimitReached: captureInfo.limitReached || false,
-        tabUrl: captureInfo.tabUrl,
-        tabTitle: captureInfo.tabTitle,
+        tabUrl: currentTabUrl,
+        tabTitle: currentTabTitle,
+        startUrl: captureInfo.tabUrl !== currentTabUrl ? captureInfo.tabUrl : undefined,
       };
 
       // Clean up resources

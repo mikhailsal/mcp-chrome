@@ -320,6 +320,7 @@ class BookmarkSearchTool extends BaseBrowserToolExecutor {
             title: bookmark.title,
             url: bookmark.url,
             dateAdded: bookmark.dateAdded,
+            dateAddedIso: bookmark.dateAdded ? new Date(bookmark.dateAdded).toISOString() : null,
             folderPath: path,
           };
         }),
@@ -466,6 +467,9 @@ class BookmarkAddTool extends BaseBrowserToolExecutor {
                   title: newBookmark.title,
                   url: newBookmark.url,
                   dateAdded: newBookmark.dateAdded,
+                  dateAddedIso: newBookmark.dateAdded
+                    ? new Date(newBookmark.dateAdded).toISOString()
+                    : null,
                   folderPath: path,
                 },
                 folderCreated: createFolder && parentId ? 'Folder created if necessary' : false,

@@ -1060,7 +1060,7 @@ export const TOOL_SCHEMAS: Tool[] = [
         timeoutMs: {
           type: 'number',
           description:
-            'Timeout in milliseconds for the user to complete all selections. Default: 180000 (3 minutes). Maximum: 600000 (10 minutes).',
+            'Timeout in milliseconds for the user to complete all selections. Default: 180000 (3 minutes). Minimum: 10000 (10 seconds). Maximum: 600000 (10 minutes). Values outside the range are clamped and a warning is included in the response.',
         },
         tabId: {
           type: 'number',

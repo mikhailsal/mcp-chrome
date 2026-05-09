@@ -381,7 +381,8 @@ class ComputerTool extends BaseBrowserToolExecutor {
               ref: params.ref,
             });
             if (resolved && resolved.success) {
-              coord = project({ x: resolved.center.x, y: resolved.center.y });
+              // ref-resolved coordinates are already in CSS viewport space — do NOT project
+              coord = { x: resolved.center.x, y: resolved.center.y };
               resolvedRef = params.ref;
               resolvedBy = 'ref';
             }
@@ -395,7 +396,8 @@ class ComputerTool extends BaseBrowserToolExecutor {
             if (selectorTarget.error) {
               selectorResolutionError = selectorTarget.error;
             } else {
-              coord = selectorTarget.coordinates ? project(selectorTarget.coordinates) : undefined;
+              // selector-resolved coordinates are already in CSS viewport space — do NOT project
+              coord = selectorTarget.coordinates || undefined;
               resolvedRef = selectorTarget.ref;
               resolvedBy = 'selector';
             }
@@ -631,7 +633,6 @@ class ComputerTool extends BaseBrowserToolExecutor {
             'Provide ref, selector, or coordinates for double/triple click',
           );
         let coord = params.coordinates ? project(params.coordinates)! : (undefined as any);
-        // If ref is provided, resolve center via accessibility helper
         if (params.ref) {
           try {
             await this.injectContentScript(tab.id, ['inject-scripts/accessibility-tree-helper.js']);
@@ -640,13 +641,13 @@ class ComputerTool extends BaseBrowserToolExecutor {
               ref: params.ref,
             });
             if (resolved && resolved.success) {
-              coord = project({ x: resolved.center.x, y: resolved.center.y })!;
+              // ref-resolved coordinates are already in CSS viewport space — do NOT project
+              coord = { x: resolved.center.x, y: resolved.center.y };
             }
           } catch (e) {
             // ignore and use provided coordinates
           }
         } else if (params.selector) {
-          // Support selector-based click
           try {
             await this.injectContentScript(tab.id, ['inject-scripts/accessibility-tree-helper.js']);
             const selectorType = params.selectorType || 'css';
@@ -660,7 +661,8 @@ class ComputerTool extends BaseBrowserToolExecutor {
               params.frameId,
             );
             if (ensured && ensured.success) {
-              coord = project({ x: ensured.center.x, y: ensured.center.y })!;
+              // selector-resolved coordinates are already in CSS viewport space — do NOT project
+              coord = { x: ensured.center.x, y: ensured.center.y };
             }
           } catch (e) {
             // ignore
@@ -783,7 +785,8 @@ class ComputerTool extends BaseBrowserToolExecutor {
               ref: params.startRef,
             });
             if (resolved && resolved.success)
-              start = project({ x: resolved.center.x, y: resolved.center.y })!;
+              // ref-resolved coordinates are already in CSS viewport space — do NOT project
+              start = { x: resolved.center.x, y: resolved.center.y };
           } catch {
             // ignore
           }
@@ -795,7 +798,8 @@ class ComputerTool extends BaseBrowserToolExecutor {
               ref: params.ref,
             });
             if (resolved && resolved.success)
-              end = project({ x: resolved.center.x, y: resolved.center.y })!;
+              // ref-resolved coordinates are already in CSS viewport space — do NOT project
+              end = { x: resolved.center.x, y: resolved.center.y };
           } catch {
             // ignore
           }
@@ -860,7 +864,8 @@ class ComputerTool extends BaseBrowserToolExecutor {
               ref: params.ref,
             });
             if (resolved && resolved.success)
-              coord = project({ x: resolved.center.x, y: resolved.center.y })!;
+              // ref-resolved coordinates are already in CSS viewport space — do NOT project
+              coord = { x: resolved.center.x, y: resolved.center.y };
           } catch {
             // ignore
           }

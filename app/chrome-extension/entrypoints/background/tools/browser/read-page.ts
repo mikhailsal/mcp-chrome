@@ -138,6 +138,7 @@ class ReadPageTool extends BaseBrowserToolExecutor {
         success: true,
         filter: filter || 'all',
         pageContent,
+        coordinateSpace: 'css-viewport',
         tips: standardTips,
         viewport: treeOk ? resp.viewport : { width: null, height: null, dpr: null },
         stats: stats || { processed: 0, included: 0, durationMs: 0 },

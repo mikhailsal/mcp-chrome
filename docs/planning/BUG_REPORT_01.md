@@ -10,16 +10,18 @@
 
 | Severity  | Count (open) |
 | --------- | ------------ |
-| High      | 2            |
-| Medium    | 1            |
-| Low       | 2            |
-| **Total** | **5**        |
+| High      | 0            |
+| Medium    | 0            |
+| Low       | 0            |
+| **Total** | **0**        |
 
 **Original report (2026-03-10):** 39 bugs across 28 tools.
 
-**Resolved (34 bugs removed):** BUG-01, BUG-02, BUG-03, BUG-04, BUG-05, BUG-06, BUG-07, BUG-08, BUG-09, BUG-10, BUG-11, BUG-12, BUG-15, BUG-16, BUG-17, BUG-18, BUG-19, BUG-20, BUG-21, BUG-23, BUG-24, BUG-25, BUG-26, BUG-27, BUG-28, BUG-29, BUG-30, BUG-31, BUG-32, BUG-34, BUG-35, BUG-36, BUG-37, BUG-38, BUG-39, BUG-40, BUG-41, BUG-43, BUG-44, BUG-46, BUG-47, BUG-48, BUG-49, BUG-50, BUG-51, BUG-52.
+**Resolved (all 39 bugs):** BUG-01 through BUG-52 (non-contiguous IDs). All three batches completed.
 
-The 5 remaining open bugs are organized below in Batch 3 (data consistency & formatting).
+**Batch 1 (5 bugs):** Performance tools — ALL FIXED (2026-05-09).  
+**Batch 2 (4 bugs):** Console tool — ALL FIXED (2026-05-09).  
+**Batch 3 (5 bugs):** Data consistency & formatting — ALL FIXED (2026-05-09).
 
 ---
 
@@ -130,11 +132,11 @@ These are not page messages and pollute every result.
 
 ---
 
-## Batch 3 — Data consistency & formatting (5 bugs)
+## Batch 3 — Data consistency & formatting (5 bugs) — ALL FIXED (2026-05-09)
 
 Cross-cutting issues: schema normalization, coordinate-space alignment, and minor formatting improvements across several tools. These are independent, low-risk fixes that can be batched together.
 
-### BUG-13 · Inconsistent request schema between backends · High
+### BUG-13 · Inconsistent request schema between backends · High — FIXED
 
 **Tool:** `chrome_network_capture`  
 **Description:** The `webRequest` backend and `debugger` backend return requests with different schemas:
@@ -145,38 +147,48 @@ Cross-cutting issues: schema normalization, coordinate-space alignment, and mino
 `status` is a number vs string, `statusCode` field appears only in one backend, `requestId` format differs. Consuming code cannot reliably parse requests without knowing which backend was used.  
 **Suggested fix:** Normalize request objects to a consistent schema regardless of backend.
 
+**Revalidation (2026-05-09):** Reproduced — debugger backend returned `status: "complete"` (string) and separate `statusCode: 200`, while webRequest returned `status: 200` (number). Fix: Debugger backend's `stopCapture` now normalizes the `status` field to always be the numeric HTTP status code (same as webRequest) and removes `statusCode`. Internal debugger-only fields (`loaderId`, `frameId`) are also stripped from the output. Verified: after fix, debugger backend returns `status: 200` (numeric), no `statusCode` field, matching webRequest schema.
+
 ---
 
-### BUG-33 · `tabUrl` stale after navigation during capture · Medium
+### BUG-33 · `tabUrl` stale after navigation during capture · Medium — FIXED
 
 **Tool:** `chrome_network_capture`  
 **Description:** The `tabUrl` and `tabTitle` in the stop response reflect the URL at capture _start_ time. If the user navigated during the capture window, the stop response still shows the old URL.  
 **Suggested fix:** Read the tab URL at stop time, not start time; or include both `startUrl`/`endUrl`.
 
+**Revalidation (2026-05-09):** Reproduced — started capture on `httpbin.org/get`, navigated to `httpbin.org/html`, stop response showed `tabUrl: "httpbin.org/get"` (stale). Fix: Both webRequest and debugger backends now re-read `chrome.tabs.get(tabId)` at stop time. `tabUrl`/`tabTitle` reflect the current state. If the URL changed during capture, a `startUrl` field is included to show the original URL. Verified: after fix, `tabUrl` correctly shows the stop-time URL for both backends.
+
 ---
 
-### BUG-14 · Viewport coordinates don't match screenshot coordinates · High
+### BUG-14 · Viewport coordinates don't match screenshot coordinates · High — FIXED
 
 **Tool:** `chrome_read_page`  
 **Description:** `chrome_read_page` reports element positions in CSS viewport pixels (e.g., viewport width=880px), while `chrome_screenshot` images capture in physical pixels (~674px wide at DPR=1.09375 scaled output). Coordinates from `read_page` cannot be directly used with coordinate-based tools after a screenshot without transformation.  
 **Suggested fix:** Unify the coordinate space across all tools.
 
+**Revalidation (2026-05-09):** Reproduced — `read_page` returned coordinates in CSS viewport pixels with no indication of coordinate space, and the `chrome_computer` tool incorrectly applied screenshot-space projection to ref/selector-resolved coordinates (which are already in CSS viewport space) for hover, double_click, triple_click, drag, and scroll actions. Fix: (1) `read_page` now includes `coordinateSpace: "css-viewport"` in the response payload to explicitly declare the coordinate system. (2) `chrome_computer` no longer applies `project()` (screenshot→viewport scaling) to coordinates resolved from `ref` or `selector` — only raw `coordinates` from user input (screenshot space) are projected. This was already correct for `left_click`/`right_click` (which delegate to `clickTool.execute()` with ref) but was broken for hover, double_click, triple_click, left_click_drag, and scroll. Verified: `read_page` response shows `coordinateSpace: "css-viewport"`.
+
 ---
 
-### BUG-42 · `dateAdded` as raw Unix ms timestamp · Low
+### BUG-42 · `dateAdded` as raw Unix ms timestamp · Low — FIXED
 
 **Tool:** `chrome_bookmark_search`, `chrome_bookmark_add`  
 **Description:** `dateAdded` is returned as a raw Unix millisecond timestamp (e.g., `1733753760000`). Not human-readable; AI callers have to convert manually.  
 **Suggested fix:** Add a `dateAddedIso` field with ISO 8601 string, or convert `dateAdded` to ISO directly.
 
+**Revalidation (2026-05-09):** Reproduced — `dateAdded: 1532510610740` with no human-readable equivalent. Fix: Both `chrome_bookmark_search` and `chrome_bookmark_add` now include a `dateAddedIso` field alongside the raw `dateAdded`. Verified: response contains `dateAdded: 1532510610740, dateAddedIso: "2018-07-25T09:23:30.740Z"`.
+
 ---
 
-### BUG-45 · `timeoutMs` silently clamped to minimum 10000ms · Low
+### BUG-45 · `timeoutMs` silently clamped to minimum 10000ms · Low — FIXED
 
 **Tool:** `chrome_request_element_selection`  
 **Description:** Passing `timeoutMs=3000` (3 seconds) results in the session timing out after 10 seconds. The small timeout was silently clamped to a minimum of 10000ms with no warning to the caller.  
 **Schema claims:** Default 180000ms, Maximum 600000ms — no minimum is documented.  
 **Suggested fix:** Document the minimum (if any) or honor the requested value.
+
+**Revalidation (2026-05-09):** Reproduced by code inspection — `normalizeTimeoutMs(3000)` returned `10000` with no indication to the caller. Fix: (1) Schema description updated to document the minimum: "Minimum: 10000 (10 seconds). Values outside the range are clamped and a warning is included in the response." (2) `normalizeTimeoutMs` now returns structured output with `clamped` flag and `originalMs`. (3) When clamping occurs, the response includes `timeoutClampedFrom` and `timeoutClampWarning` fields informing the caller of the adjustment. The 10-second minimum is preserved (reasonable for human interaction) but callers are no longer left in the dark about it.
 
 ---
 

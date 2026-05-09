@@ -586,6 +586,17 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
       `NetworkDebuggerStartTool: Stopping capture for tab ${tabId}. Auto-stop: ${isAutoStop}`,
     );
 
+    // Re-read tab URL/title at stop time to reflect any navigation during capture
+    let currentTabUrl = captureInfo.tabUrl;
+    let currentTabTitle = captureInfo.tabTitle;
+    try {
+      const tab = await chrome.tabs.get(tabId);
+      currentTabUrl = tab.url || currentTabUrl;
+      currentTabTitle = tab.title || currentTabTitle;
+    } catch {
+      // Tab may have closed; use start-time values
+    }
+
     try {
       // Attempt to disable network and detach via manager; it will no-op if others own the session
       try {
@@ -622,12 +633,25 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
       const finalReq: Partial<NetworkRequestInfo> &
         Pick<NetworkRequestInfo, 'requestId' | 'url' | 'method' | 'type' | 'status'> = { ...req };
 
+      // Normalize schema: ensure `status` is always the numeric HTTP status code
+      // and remove the string-based status field used internally
+      if (typeof finalReq.statusCode === 'number') {
+        (finalReq as any).status = finalReq.statusCode;
+      } else if (typeof finalReq.status === 'string') {
+        // Map string status to a numeric sentinel if no statusCode available
+        (finalReq as any).status = finalReq.status === 'error' ? 0 : undefined;
+      }
+      delete finalReq.statusCode;
+      // Remove debugger-internal fields not useful to callers
+      delete (finalReq as any).loaderId;
+      delete (finalReq as any).frameId;
+
       if (finalReq.requestHeaders) {
         finalReq.specificRequestHeaders = this.filterOutCommonHeaders(
           finalReq.requestHeaders,
           commonRequestHeaders,
         );
-        delete finalReq.requestHeaders; // Remove original full headers
+        delete finalReq.requestHeaders;
       } else {
         finalReq.specificRequestHeaders = {};
       }
@@ -637,11 +661,11 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
           finalReq.responseHeaders,
           commonResponseHeaders,
         );
-        delete finalReq.responseHeaders; // Remove original full headers
+        delete finalReq.responseHeaders;
       } else {
         finalReq.specificResponseHeaders = {};
       }
-      return finalReq as NetworkRequestInfo; // Cast back to full type
+      return finalReq as NetworkRequestInfo;
     });
 
     // Sort requests by requestTime
@@ -654,7 +678,7 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
       commonRequestHeaders,
       commonResponseHeaders,
       requests: processedRequests,
-      requestCount: processedRequests.length, // Actual stored requests
+      requestCount: processedRequests.length,
       totalRequestsReceivedBeforeLimit: captureInfo.limitReached
         ? NetworkDebuggerStartTool.MAX_REQUESTS_PER_CAPTURE
         : processedRequests.length,
@@ -664,8 +688,9 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
           ? 'inactivity_timeout'
           : 'max_capture_time'
         : 'user_request',
-      tabUrl: captureInfo.tabUrl,
-      tabTitle: captureInfo.tabTitle,
+      tabUrl: currentTabUrl,
+      tabTitle: currentTabTitle,
+      startUrl: captureInfo.tabUrl !== currentTabUrl ? captureInfo.tabUrl : undefined,
     };
 
     console.log(

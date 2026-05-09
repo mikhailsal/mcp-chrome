@@ -65,11 +65,22 @@ function toTrimmedString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function normalizeTimeoutMs(value: unknown): number {
-  if (value === undefined || value === null) return DEFAULT_TIMEOUT_MS;
+function normalizeTimeoutMs(value: unknown): {
+  timeoutMs: number;
+  clamped: boolean;
+  originalMs?: number;
+} {
+  if (value === undefined || value === null)
+    return { timeoutMs: DEFAULT_TIMEOUT_MS, clamped: false };
   const n = Number(value);
-  if (!Number.isFinite(n) || n <= 0) return DEFAULT_TIMEOUT_MS;
-  return Math.min(Math.max(Math.floor(n), MIN_TIMEOUT_MS), MAX_TIMEOUT_MS);
+  if (!Number.isFinite(n) || n <= 0) return { timeoutMs: DEFAULT_TIMEOUT_MS, clamped: false };
+  const clamped = Math.min(Math.max(Math.floor(n), MIN_TIMEOUT_MS), MAX_TIMEOUT_MS);
+  const wasClamped = clamped !== Math.floor(n);
+  return {
+    timeoutMs: clamped,
+    clamped: wasClamped,
+    originalMs: wasClamped ? Math.floor(n) : undefined,
+  };
 }
 
 function normalizeRequests(requests: ElementPickerRequest[]): NormalizedRequest[] {
@@ -183,7 +194,11 @@ class ElementPickerTool extends BaseBrowserToolExecutor {
       );
     }
 
-    const timeoutMs = normalizeTimeoutMs(args?.timeoutMs);
+    const {
+      timeoutMs,
+      clamped: timeoutClamped,
+      originalMs: timeoutOriginalMs,
+    } = normalizeTimeoutMs(args?.timeoutMs);
     const sessionId = `ep_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
     const deadlineTs = Date.now() + timeoutMs;
 
@@ -283,7 +298,10 @@ class ElementPickerTool extends BaseBrowserToolExecutor {
       ]);
 
       const missing = listMissingRequestIds(requests, pickedById);
-      const result: ElementPickerResult = {
+      const result: ElementPickerResult & {
+        timeoutClampedFrom?: number;
+        timeoutClampWarning?: string;
+      } = {
         success: final.success,
         sessionId,
         timeoutMs,
@@ -292,6 +310,13 @@ class ElementPickerTool extends BaseBrowserToolExecutor {
         missingRequestIds: missing.length > 0 ? missing : undefined,
         results: buildResultItems(requests, pickedById),
       };
+
+      if (timeoutClamped && timeoutOriginalMs !== undefined) {
+        result.timeoutClampedFrom = timeoutOriginalMs;
+        result.timeoutClampWarning =
+          `Requested timeoutMs=${timeoutOriginalMs} was clamped to ${timeoutMs}ms ` +
+          `(allowed range: ${MIN_TIMEOUT_MS}–${MAX_TIMEOUT_MS}ms).`;
+      }
 
       resolveResult?.(result);
     };
