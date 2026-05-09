@@ -23,6 +23,7 @@ interface ConsoleToolParams {
   pattern?: string;
   onlyErrors?: boolean;
   limit?: number;
+  verbose?: boolean;
 }
 
 interface ConsoleMessage {
@@ -123,6 +124,32 @@ function applyResultFilters(
   };
 }
 
+function isExtensionInternalMessage(url?: string): boolean {
+  if (!url) return false;
+  const extensionOrigin = chrome.runtime.getURL('');
+  return url.startsWith(extensionOrigin);
+}
+
+function stripVerboseFields(message: ConsoleMessage): Partial<ConsoleMessage> {
+  return {
+    timestamp: message.timestamp,
+    level: message.level,
+    text: message.text,
+    ...(message.url ? { url: message.url } : {}),
+    ...(message.lineNumber !== undefined ? { lineNumber: message.lineNumber } : {}),
+  };
+}
+
+function stripVerboseExceptionFields(exception: ConsoleException): Partial<ConsoleException> {
+  return {
+    timestamp: exception.timestamp,
+    text: exception.text,
+    ...(exception.url ? { url: exception.url } : {}),
+    ...(exception.lineNumber !== undefined ? { lineNumber: exception.lineNumber } : {}),
+    ...(exception.columnNumber !== undefined ? { columnNumber: exception.columnNumber } : {}),
+  };
+}
+
 function isDebuggerConflictError(error: unknown): boolean {
   const msg = (error instanceof Error ? error.message : String(error)).toLowerCase();
   return msg.includes('debugger is already attached') || msg.includes('another client');
@@ -157,6 +184,7 @@ class ConsoleTool extends BaseBrowserToolExecutor {
       pattern,
       onlyErrors = false,
       limit,
+      verbose = false,
     } = args;
 
     let targetTab: chrome.tabs.Tab;
@@ -254,22 +282,34 @@ class ConsoleTool extends BaseBrowserToolExecutor {
           clearedSummary += ` Cleared ${clearedAfter.clearedMessages} messages and ${clearedAfter.clearedExceptions} exceptions after reading.`;
         }
 
+        // Filter extension-internal messages
+        const filteredMessages = (read.messages as ConsoleMessage[]).filter(
+          (m) => !isExtensionInternalMessage(m.url),
+        );
+        const filteredExceptions = (read.exceptions as ConsoleException[]).filter(
+          (e) => !isExtensionInternalMessage(e.url),
+        );
+
         const result: ConsoleResult = {
           success: true,
           message:
             `Console buffer read for tab ${targetTabId}.` +
             clearedSummary +
-            ` Returned ${read.messageCount} messages and ${read.exceptionCount} exceptions.`,
+            ` Returned ${filteredMessages.length} messages and ${filteredExceptions.length} exceptions.`,
           tabId: targetTabId,
           tabUrl: read.tabUrl || '',
           tabTitle: read.tabTitle || '',
           captureStartTime: read.captureStartTime,
           captureEndTime: read.captureEndTime,
           totalDurationMs: read.totalDurationMs,
-          messages: read.messages as ConsoleMessage[],
-          exceptions: read.exceptions as ConsoleException[],
-          messageCount: read.messageCount,
-          exceptionCount: read.exceptionCount,
+          messages: verbose
+            ? filteredMessages
+            : (filteredMessages.map(stripVerboseFields) as ConsoleMessage[]),
+          exceptions: verbose
+            ? filteredExceptions
+            : (filteredExceptions.map(stripVerboseExceptionFields) as ConsoleException[]),
+          messageCount: filteredMessages.length,
+          exceptionCount: filteredExceptions.length,
           messageLimitReached: read.messageLimitReached,
           droppedMessageCount: read.droppedMessageCount,
           droppedExceptionCount: read.droppedExceptionCount,
@@ -287,12 +327,60 @@ class ConsoleTool extends BaseBrowserToolExecutor {
         maxMessages: effectiveLimit,
       });
 
+      // Filter extension-internal messages before applying user filters
+      result.messages = result.messages.filter((m) => !isExtensionInternalMessage(m.url));
+      result.exceptions = result.exceptions.filter((e) => !isExtensionInternalMessage(e.url));
+      result.messageCount = result.messages.length;
+      result.exceptionCount = result.exceptions.length;
+
       // Apply filters
-      const filtered = applyResultFilters(result, {
+      let filtered = applyResultFilters(result, {
         pattern: compiledPattern,
         onlyErrors,
         includeExceptions,
       });
+
+      // BUG-27 fix: if onlyErrors=true and snapshot found 0 errors, check the buffer for pre-existing errors
+      if (onlyErrors && filtered.messageCount === 0 && filtered.exceptionCount === 0) {
+        try {
+          await consoleBuffer.ensureStarted(targetTabId);
+          const bufferRead = consoleBuffer.read(targetTabId, {
+            pattern: compiledPattern,
+            onlyErrors: true,
+            limit: effectiveLimit,
+            includeExceptions,
+          });
+          if (bufferRead && (bufferRead.messageCount > 0 || bufferRead.exceptionCount > 0)) {
+            const bufferMessages = (bufferRead.messages as ConsoleMessage[]).filter(
+              (m) => !isExtensionInternalMessage(m.url),
+            );
+            const bufferExceptions = (bufferRead.exceptions as ConsoleException[]).filter(
+              (e) => !isExtensionInternalMessage(e.url),
+            );
+            if (bufferMessages.length > 0 || bufferExceptions.length > 0) {
+              filtered = {
+                ...filtered,
+                message: `Console snapshot found no new errors during observation window, but ${bufferMessages.length} error(s) and ${bufferExceptions.length} exception(s) found in the persistent buffer (pre-existing).`,
+                messages: bufferMessages,
+                exceptions: bufferExceptions,
+                messageCount: bufferMessages.length,
+                exceptionCount: bufferExceptions.length,
+              };
+            }
+          }
+        } catch {
+          // Buffer fallback is best-effort; if it fails, return the empty snapshot result
+        }
+      }
+
+      // Apply compact output unless verbose requested
+      if (!verbose) {
+        filtered = {
+          ...filtered,
+          messages: filtered.messages.map(stripVerboseFields) as ConsoleMessage[],
+          exceptions: filtered.exceptions.map(stripVerboseExceptionFields) as ConsoleException[],
+        };
+      }
 
       return {
         content: [{ type: 'text', text: JSON.stringify(filtered) }],
@@ -406,15 +494,17 @@ class ConsoleTool extends BaseBrowserToolExecutor {
         if (source.tabId !== tabId) return;
 
         if (method === 'Log.entryAdded' && params?.entry) {
+          if (isExtensionInternalMessage(params.entry.url)) return;
           collectedMessages.push(params.entry);
         } else if (method === 'Runtime.consoleAPICalled' && params) {
-          // Convert Runtime.consoleAPICalled to Log.entryAdded format
+          const callFrameUrl = params.stackTrace?.callFrames?.[0]?.url;
+          if (isExtensionInternalMessage(callFrameUrl)) return;
           const logEntry = {
             timestamp: params.timestamp,
             level: params.type || 'log',
             text: this.formatConsoleArgs(params.args || []),
             source: 'console-api',
-            url: params.stackTrace?.callFrames?.[0]?.url,
+            url: callFrameUrl,
             lineNumber: params.stackTrace?.callFrames?.[0]?.lineNumber,
             stackTrace: params.stackTrace,
             args: params.args,

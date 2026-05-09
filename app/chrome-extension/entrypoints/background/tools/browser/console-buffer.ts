@@ -15,6 +15,7 @@ export interface BufferedConsoleMessage {
   level: string;
   text: string;
   args?: unknown[];
+  argsSerialized?: unknown[];
   source?: string;
   url?: string;
   lineNumber?: number;
@@ -74,6 +75,30 @@ function extractHostname(url?: string): string {
   } catch {
     return '';
   }
+}
+
+/**
+ * Check whether a console message originated from the extension's own scripts.
+ */
+function isExtensionInternalMessage(url?: string): boolean {
+  if (!url) return false;
+  const extensionOrigin = chrome.runtime.getURL('');
+  return url.startsWith(extensionOrigin);
+}
+
+/**
+ * Lightweight serialization of a CDP RemoteObject preview into a JS-native value.
+ * Used to produce `argsSerialized` in buffer mode without calling Runtime.callFunctionOn.
+ */
+function serializeArgPreview(arg: unknown): unknown {
+  const a = arg as Record<string, unknown>;
+  if (!a || typeof a !== 'object') return arg;
+
+  if ('unserializableValue' in a) return a.unserializableValue;
+  if ('value' in a) return a.value;
+  if (a.type === 'undefined') return undefined;
+  if (a.description) return a.description;
+  return '[Object]';
 }
 
 function isErrorLevel(level?: string): boolean {
@@ -361,12 +386,15 @@ class ConsoleBuffer {
 
     if (method === 'Log.entryAdded' && p?.entry) {
       const entry = p.entry as Record<string, unknown>;
+      const entryUrl = safeString(entry.url);
+      if (isExtensionInternalMessage(entryUrl)) return;
+
       state.messages.push({
         timestamp: safeTimestamp(entry.timestamp),
         level: safeString(entry.level) || 'log',
         text: safeString(entry.text),
         source: safeString(entry.source),
-        url: safeString(entry.url),
+        url: entryUrl,
         lineNumber: safeNumber(entry.lineNumber),
         stackTrace: entry.stackTrace,
       });
@@ -377,18 +405,22 @@ class ConsoleBuffer {
     if (method === 'Runtime.consoleAPICalled' && p) {
       const stackTrace = p.stackTrace as Record<string, unknown[]> | undefined;
       const callFrame = stackTrace?.callFrames?.[0] as Record<string, unknown> | undefined;
+      const callFrameUrl = safeString(callFrame?.url);
+      if (isExtensionInternalMessage(callFrameUrl)) return;
+
       const rawArgs = (p.args as unknown[]) || [];
+      const argPreviews = rawArgs.map(extractArgPreview);
 
       state.messages.push({
         timestamp: safeTimestamp(p.timestamp),
         level: safeString(p.type) || 'log',
         text: formatConsoleArgs(rawArgs),
         source: 'console-api',
-        url: safeString(callFrame?.url),
+        url: callFrameUrl,
         lineNumber: safeNumber(callFrame?.lineNumber),
         stackTrace: stackTrace,
-        // Store only safe preview data to avoid memory leaks.
-        args: rawArgs.map(extractArgPreview),
+        args: argPreviews,
+        argsSerialized: argPreviews.map(serializeArgPreview),
       });
       this.trimMessages(state);
       return;

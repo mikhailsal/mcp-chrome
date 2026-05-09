@@ -1124,7 +1124,7 @@ export const TOOL_SCHEMAS: Tool[] = [
   {
     name: TOOL_NAMES.BROWSER.CONSOLE,
     description:
-      'Capture console output from a browser tab. Supports snapshot mode (default; one-time capture with ~2s wait) and buffer mode (persistent per-tab buffer you can read/clear instantly without waiting).',
+      'Capture console output from a browser tab. Supports snapshot mode (default; one-time capture with ~2s wait) and buffer mode (persistent per-tab buffer you can read/clear instantly without waiting). Extension-internal logs are automatically filtered out. Returns compact output by default (set verbose=true for full details). When onlyErrors=true in snapshot mode, also checks the persistent buffer for pre-existing errors.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1188,6 +1188,11 @@ export const TOOL_SCHEMAS: Tool[] = [
           type: 'number',
           description:
             'Limit returned console messages. In snapshot mode this is an alias for maxMessages; in buffer mode it limits returned messages from the buffer.',
+        },
+        verbose: {
+          type: 'boolean',
+          description:
+            'Return full message details including stackTrace, args, argsSerialized, and source fields. Default: false (compact mode returns only timestamp, level, text, url, lineNumber).',
         },
       },
       required: [],

@@ -11,15 +11,15 @@
 | Severity  | Count (open) |
 | --------- | ------------ |
 | High      | 2            |
-| Medium    | 4            |
-| Low       | 3            |
-| **Total** | **9**        |
+| Medium    | 1            |
+| Low       | 2            |
+| **Total** | **5**        |
 
 **Original report (2026-03-10):** 39 bugs across 28 tools.
 
-**Resolved (30 bugs removed):** BUG-01, BUG-02, BUG-03, BUG-04, BUG-05, BUG-06, BUG-07, BUG-08, BUG-09, BUG-10, BUG-11, BUG-12, BUG-15, BUG-16, BUG-17, BUG-18, BUG-19, BUG-20, BUG-21, BUG-23, BUG-24, BUG-28, BUG-29, BUG-30, BUG-31, BUG-32, BUG-34, BUG-35, BUG-36, BUG-37, BUG-38, BUG-39, BUG-40, BUG-41, BUG-43, BUG-44, BUG-46, BUG-47, BUG-49, BUG-50, BUG-51, BUG-52.
+**Resolved (34 bugs removed):** BUG-01, BUG-02, BUG-03, BUG-04, BUG-05, BUG-06, BUG-07, BUG-08, BUG-09, BUG-10, BUG-11, BUG-12, BUG-15, BUG-16, BUG-17, BUG-18, BUG-19, BUG-20, BUG-21, BUG-23, BUG-24, BUG-25, BUG-26, BUG-27, BUG-28, BUG-29, BUG-30, BUG-31, BUG-32, BUG-34, BUG-35, BUG-36, BUG-37, BUG-38, BUG-39, BUG-40, BUG-41, BUG-43, BUG-44, BUG-46, BUG-47, BUG-48, BUG-49, BUG-50, BUG-51, BUG-52.
 
-The 14 remaining open bugs are organized below into three fix batches by subsystem affinity, so each batch can be tackled in a single session.
+The 5 remaining open bugs are organized below in Batch 3 (data consistency & formatting).
 
 ---
 
@@ -85,11 +85,11 @@ Covers `performance_start_trace` and `performance_analyze_insight`. These tools 
 
 ---
 
-## Batch 2 — Console tool (4 bugs)
+## Batch 2 — Console tool (4 bugs) — ALL FIXED (2026-05-09)
 
-All four bugs are in `chrome_console`. They can be addressed with a single pass over the console capture and response logic.
+All four bugs are in `chrome_console`. They were addressed with a single pass over the console capture and response logic.
 
-### BUG-25 · Extension-internal logs leak into user output · Medium
+### BUG-25 · Extension-internal logs leak into user output · Medium — FIXED
 
 **Description:** Internal extension bootstrapping messages appear in every console capture:
 
@@ -99,26 +99,34 @@ All four bugs are in `chrome_console`. They can be addressed with a single pass 
 These are not page messages and pollute every result.  
 **Suggested fix:** Filter log entries originating from the extension's own scripts (by `scriptId` or source URL pattern).
 
+**Revalidation (2026-05-09):** Reproduced — snapshot mode returned 3 messages including `[QuickPanelContentScript] Content script loaded on: https://httpbin.org/forms/post` and `Accessibility tree helper script loaded`, both from `chrome-extension://knmmolckapdhmgfphdofiipgffebkclm/...` URLs. Fix: Both snapshot and buffer modes now filter messages where the source URL starts with the extension's own origin (`chrome.runtime.getURL('')`). Filter is applied at event collection time (early discard) and again at output time (defense in depth). After fix: only 1 genuine page message (favicon 404) returned, zero extension-internal logs.
+
 ---
 
-### BUG-26 · `argsSerialized` present in `snapshot` mode, absent in `buffer` mode · Medium
+### BUG-26 · `argsSerialized` present in `snapshot` mode, absent in `buffer` mode · Medium — FIXED
 
 **Description:** The `snapshot` mode response includes `argsSerialized` per message object; the `buffer` mode response omits it. This inconsistency makes it impossible to write consuming code that handles both modes uniformly.  
 **Suggested fix:** Normalize the message schema across both modes.
 
+**Revalidation (2026-05-09):** Reproduced — buffer mode returned messages with `args` but no `argsSerialized` field. Fix: Buffer mode now produces `argsSerialized` using a lightweight serialization function (`serializeArgPreview`) that extracts primitive values from CDP RemoteObject previews without the expensive `Runtime.callFunctionOn` calls used in snapshot mode. Both modes now return messages with the same schema (`args` + `argsSerialized`). Verified: `console.log('test', 42, {key:'value'})` → buffer returns `argsSerialized: ["test", 42, "Object"]`.
+
 ---
 
-### BUG-27 · `onlyErrors` returns 0 results if errors occurred before the call · Medium
+### BUG-27 · `onlyErrors` returns 0 results if errors occurred before the call · Medium — FIXED
 
 **Description:** In `snapshot` mode, the tool only captures messages logged _during_ the 2-second observation window after the call. `onlyErrors:true` returns empty results if page errors happened before the call. This misleads callers into thinking the page has no errors.  
 **Suggested fix:** Maintain a rolling error buffer in the extension background and return recent errors on demand, regardless of timing.
 
+**Revalidation (2026-05-09):** Reproduced — `onlyErrors: true` in snapshot mode returned 0 messages despite known page errors. Fix: When `onlyErrors=true` in snapshot mode yields 0 results, the tool now automatically falls back to the persistent buffer (`consoleBuffer`). If the buffer isn't active for the tab, it's started automatically. The buffer retains up to 2000 messages, so pre-existing errors are always available. Verified: injected `console.error('PRE_EXISTING_ERROR_XYZ')` on example.com, then called `onlyErrors=true` snapshot — the pre-existing error was found via buffer fallback.
+
 ---
 
-### BUG-48 · Message objects are excessively verbose by default · Low
+### BUG-48 · Message objects are excessively verbose by default · Low — FIXED
 
 **Description:** Every console message includes full `stackTrace`, `scriptId`, `args` array (raw CDP), and `argsSerialized`. For typical debugging use, this is 5-10× more data than necessary and makes responses very large.  
 **Suggested fix:** Return a compact form by default (`level`, `text`, `timestamp`); offer a `verbose:true` flag for full details.
+
+**Revalidation (2026-05-09):** Reproduced — default output included `stackTrace`, `args`, `argsSerialized`, `source` for every message. Fix: Added `verbose` parameter (default: `false`). Compact mode (default) returns only `timestamp`, `level`, `text`, plus `url` and `lineNumber` when present. Full details (`stackTrace`, `args`, `argsSerialized`, `source`) are only included when `verbose=true`. Tool schema and description updated. Verified: compact output ~5× smaller than verbose output for typical messages.
 
 ---
 
