@@ -955,13 +955,14 @@ export const TOOL_SCHEMAS: Tool[] = [
   {
     name: TOOL_NAMES.BROWSER.FILL,
     description:
-      'Fill or select a form element on a web page. Supports input, textarea, select, checkbox, and radio elements. Use CSS selector, XPath, or element ref to target the element.',
+      'Fill or select a form element on a web page. Supports input, textarea, select, checkbox, and radio elements. Use CSS selector, XPath, or element ref to target the element. IMPORTANT: You must provide either "selector" or "ref" to identify the target element.',
     inputSchema: {
       type: 'object',
       properties: {
         selector: {
           type: 'string',
-          description: 'CSS selector or XPath for the form element.',
+          description:
+            'CSS selector or XPath for the form element. Required if "ref" is not provided.',
         },
         selectorType: {
           type: 'string',
@@ -970,7 +971,8 @@ export const TOOL_SCHEMAS: Tool[] = [
         },
         ref: {
           type: 'string',
-          description: 'Element ref from chrome_read_page (takes precedence over selector).',
+          description:
+            'Element ref from chrome_read_page (takes precedence over selector). Required if "selector" is not provided.',
         },
         value: {
           type: 'string',
@@ -991,6 +993,7 @@ export const TOOL_SCHEMAS: Tool[] = [
         },
       },
       required: ['value'],
+      anyOf: [{ required: ['selector'] }, { required: ['ref'] }],
     },
   },
   {

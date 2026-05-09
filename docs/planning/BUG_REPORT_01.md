@@ -48,6 +48,13 @@
 - BUG-36 is fixed: `refMapCount` now counts actual refs in `pageContent` instead of using the interactive-only refMap array length.
 - BUG-24 is not reproducible: timeout handling already returns structured user-friendly errors via the `TimeoutError` class.
 
+**Post-report addendum (2026-05-09, error handling & validation revalidation):**
+
+- BUG-44 is fixed: file existence is now validated at the native server level before forwarding the upload to the extension. Nonexistent paths, directories, and unreadable files return clear errors.
+- BUG-43 is fixed: `chrome_handle_download` errors now return structured JSON `{ success: false, error: "..." }` instead of plain strings.
+- BUG-37 is fixed: `chrome_fill_or_select` schema now includes `anyOf: [{ required: ["selector"] }, { required: ["ref"] }]` and updated descriptions to enforce the selector/ref requirement at the schema level.
+- BUG-34 is fixed: `chrome_handle_dialog` now parses CDP errors and returns user-friendly structured JSON `{ success: false, error: "No dialog is currently showing." }` instead of raw CDP JSON.
+
 ---
 
 ## `chrome_gif_recorder` (7 bugs)
@@ -457,34 +464,40 @@ The likely cause of the original report: `chrome_read_page` shows the button as 
 
 ## `chrome_handle_dialog` (1 bug)
 
-### BUG-34 · Returns raw CDP JSON error object · Medium
+### BUG-34 · Returns raw CDP JSON error object · Medium — FIXED (2026-05-09)
 
 **Description:** When no dialog is showing, the error returned is `{"code":-32602,"message":"No dialog is showing"}` — raw CDP JSON object. Not user-friendly.  
 **Suggested fix:** Transform to `{ "success": false, "error": "No dialog is currently showing." }`.
+
+**Revalidation (2026-05-09):** Reproduced — `chrome_handle_dialog` with `action: "accept"` and no active dialog returned `Failed to handle dialog: {"code":-32602,"message":"No dialog is showing"}`. Fixed by parsing known CDP error codes in `dialog.ts` and returning structured JSON: `{ success: false, error: "No dialog is currently showing." }`.
 
 ---
 
 ## `chrome_fill_or_select` (1 bug)
 
-### BUG-37 · Schema doesn't enforce `selector`/`ref` requirement · Low
+### BUG-37 · Schema doesn't enforce `selector`/`ref` requirement · Low — FIXED (2026-05-09)
 
 **Description:** The input schema marks only `value` as required. At runtime the tool also requires either `selector` or `ref`. The schema mismatch means AI/LLM callers won't be warned by schema validation that they need to provide a target.  
 **Suggested fix:** Add `oneOf: [required: ["selector"], required: ["ref"]]` to the schema.
+
+**Revalidation (2026-05-09):** Reproduced — calling `chrome_fill_or_select` with only `{ value: "test" }` passed schema validation but failed at runtime with `Invalid parameters: Provide ref or selector`. Fixed by adding `anyOf: [{ required: ["selector"] }, { required: ["ref"] }]` to the tool schema and updating property descriptions to explicitly state that either `selector` or `ref` is required.
 
 ---
 
 ## `chrome_handle_download` (1 bug)
 
-### BUG-43 · Error format is plain string, not structured JSON · Low
+### BUG-43 · Error format is plain string, not structured JSON · Low — FIXED (2026-05-09)
 
 **Description:** Timeout error is returned as a plain string: `"Handle download failed: Download wait timed out"` — inconsistent with other tools that return structured JSON error objects.  
 **Suggested fix:** Return `{ "success": false, "error": "Download wait timed out" }`.
+
+**Revalidation (2026-05-09):** Reproduced — `chrome_handle_download` with `timeoutMs: 1000` returned the plain string `"Handle download failed: Download wait timed out"`. Fixed by replacing `createErrorResponse` in the catch block with a structured JSON response: `{ success: false, error: "Download wait timed out" }`.
 
 ---
 
 ## `chrome_upload_file` (1 bug)
 
-### BUG-44 · Accepts nonexistent file paths and reports success · Low
+### BUG-44 · Accepts nonexistent file paths and reports success · Low — FIXED (2026-05-09)
 
 **Description:** Providing a path to a nonexistent file (`/tmp/nonexistent-xyz.txt`) returns `{ "success": true, "message": "File(s) uploaded successfully" }`. The file input in the browser shows the filename but no actual file data exists. No error is surfaced.  
 **Steps to reproduce:**
@@ -496,6 +509,8 @@ The likely cause of the original report: `chrome_read_page` shows the button as 
 **Expected:** Error — "File not found at path: /tmp/nonexistent-xyz.txt"  
 **Actual:** `success: true`  
 **Suggested fix:** Validate file existence on the native server before passing to the extension.
+
+**Revalidation (2026-05-09):** Reproduced — `chrome_upload_file` with nonexistent `/tmp/nonexistent-xyz-12345.txt` returned `success: true`. Fixed by adding file existence, type, and readability pre-validation in the native server's `register-tools.ts` before forwarding the tool call to the extension. Nonexistent paths now return `"File not found at path: ..."`, directory paths return `"Path is not a file: ..."`, and unreadable files return `"File is not accessible: ..."`.
 
 ---
 

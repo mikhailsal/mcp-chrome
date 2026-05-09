@@ -44,9 +44,26 @@ class HandleDialogTool extends BaseBrowserToolExecutor {
         isError: false,
       };
     } catch (error) {
-      return createErrorResponse(
-        `Failed to handle dialog: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      const raw = error instanceof Error ? error.message : String(error);
+
+      let userMessage: string;
+      if (raw.includes('No dialog is showing')) {
+        userMessage = 'No dialog is currently showing.';
+      } else if (raw.includes('Dialog already handled')) {
+        userMessage = 'Dialog was already handled.';
+      } else {
+        userMessage = raw.replace(/\{.*"code".*\}/, '').trim() || raw;
+      }
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({ success: false, error: userMessage }),
+          },
+        ],
+        isError: true,
+      };
     }
   }
 }

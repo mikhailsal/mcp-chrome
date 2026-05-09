@@ -26,7 +26,16 @@ class HandleDownloadTool extends BaseBrowserToolExecutor {
         isError: false,
       };
     } catch (e: any) {
-      return createErrorResponse(`Handle download failed: ${e?.message || String(e)}`);
+      const errorMessage = e?.message || String(e);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({ success: false, error: errorMessage }),
+          },
+        ],
+        isError: true,
+      };
     }
   }
 }

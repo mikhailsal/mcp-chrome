@@ -5,8 +5,9 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import nativeMessagingHostInstance from '../native-messaging-host';
-import { NativeMessageType, TOOL_SCHEMAS } from 'chrome-mcp-shared';
+import { NativeMessageType, TOOL_NAMES, TOOL_SCHEMAS } from 'chrome-mcp-shared';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import * as fs from 'fs';
 
 async function listDynamicFlowTools(): Promise<Tool[]> {
   try {
@@ -117,6 +118,38 @@ const handleToolCall = async (name: string, args: any): Promise<CallToolResult> 
         };
       }
     }
+    // Pre-validate file existence for chrome_upload_file before forwarding to extension
+    if (name === TOOL_NAMES.BROWSER.FILE_UPLOAD && args?.filePath) {
+      const filePath = String(args.filePath).trim();
+      if (!filePath) {
+        return {
+          content: [{ type: 'text', text: 'File path is empty.' }],
+          isError: true,
+        };
+      }
+      if (!fs.existsSync(filePath)) {
+        return {
+          content: [{ type: 'text', text: `File not found at path: ${filePath}` }],
+          isError: true,
+        };
+      }
+      try {
+        const stat = fs.statSync(filePath);
+        if (!stat.isFile()) {
+          return {
+            content: [{ type: 'text', text: `Path is not a file: ${filePath}` }],
+            isError: true,
+          };
+        }
+        fs.accessSync(filePath, fs.constants.R_OK);
+      } catch {
+        return {
+          content: [{ type: 'text', text: `File is not accessible: ${filePath}` }],
+          isError: true,
+        };
+      }
+    }
+
     // Send the request to the Chrome extension and wait for the response.
     const response = await nativeMessagingHostInstance.sendRequestToExtensionAndWait(
       {

@@ -52,7 +52,6 @@ class FileUploadTool extends BaseBrowserToolExecutor {
       let files: string[] = [];
 
       if (filePath) {
-        // Direct file path provided
         files = [filePath];
       } else if (fileUrl || base64Data) {
         // For URL or base64, we need to use the native messaging host
