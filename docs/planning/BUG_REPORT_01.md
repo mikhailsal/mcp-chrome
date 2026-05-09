@@ -1,8 +1,7 @@
 # MCP Chrome Extension — Bug Report
 
-**Date:** 2026-03-10  
+**Date:** 2026-03-10 (original); **Updated:** 2026-05-09  
 **Tester:** Automated via connected MCP  
-**Tools tested:** All 28 active tools across the full API surface  
 **Environment:** Chrome 143, Linux x86_64, DPR=1.09375, 4 windows / 151 tabs
 
 ---
@@ -11,194 +10,74 @@
 
 | Severity  | Count  |
 | --------- | ------ |
-| Critical  | 1      |
-| High      | 8      |
-| Medium    | 14     |
-| Low       | 16     |
-| **Total** | **39** |
+| High      | 4      |
+| Medium    | 7      |
+| Low       | 3      |
+| **Total** | **14** |
 
-**10 bugs resolved and removed since initial report:** BUG-01, BUG-03, BUG-04, BUG-05, BUG-06, BUG-17, BUG-18, BUG-19, BUG-21, BUG-23.
+**Original report (2026-03-10):** 39 bugs across 28 tools.
 
-**Post-report addendum (2026-04-25):** BUG-52 was identified and fixed after this snapshot. The summary table above remains the original 2026-03-10 count.
+**Resolved (25 bugs removed):** BUG-01, BUG-02, BUG-03, BUG-04, BUG-05, BUG-06, BUG-07, BUG-08, BUG-09, BUG-10, BUG-11, BUG-12, BUG-17, BUG-18, BUG-19, BUG-20, BUG-21, BUG-23, BUG-24, BUG-28, BUG-29, BUG-32, BUG-34, BUG-35, BUG-36, BUG-37, BUG-38, BUG-39, BUG-40, BUG-43, BUG-44, BUG-46, BUG-47, BUG-49, BUG-50, BUG-51, BUG-52.
 
-**Post-report addendum (2026-04-25, GIF recorder revalidation):**
-
-- BUG-10 is not reproducible on the current branch. A regression test now verifies that `action="start"` followed by `action="status"` stays in `isRecording:true`.
-- BUG-11, BUG-12, BUG-32, BUG-39, BUG-40, and BUG-50 are fixed on the current branch.
-- Regression coverage was added in `app/chrome-extension/tests/browser/gif-recorder.tool.test.ts`.
-
-**Post-report addendum (2026-04-25, `chrome_computer` revalidation):**
-
-- BUG-08, BUG-09, BUG-38, and BUG-46 are fixed on the current branch.
-- BUG-51 is not reproducible as originally written: `https://httpbin.org/forms/post` exposes a plain `<button>` without `type="submit"`, so `button[type=submit]` and `input[type=submit]` correctly do not match. The selector-hover fallback path was still hardened, and `selector: "button"` now revalidates successfully.
-- Regression coverage was added in `app/chrome-extension/tests/browser/computer.tool.test.ts` and `app/chrome-extension/tests/browser/screenshot.tool.test.ts`.
-
-**Post-report addendum (2026-04-26, `chrome_screenshot` / `chrome_navigate` revalidation):**
-
-- BUG-29 and BUG-35 are fixed on the current branch.
-- BUG-47 is fixed by surfacing an explicit warning whenever full-page capture hides fixed/sticky elements during stitching.
-- BUG-20 is not reproducible as originally written on the current branch: fresh-tab `fullPage:true` captures still returned tall full-page images. A separate background-tab capture issue was observed during verification and should be tracked independently.
-- BUG-49 is not reproducible as originally written on the current branch because real MCP history traversal currently fails earlier with `Cannot find a next page in history`, so the missing-`finalUrl` response shape could not be revalidated.
-- Regression coverage was added in `app/chrome-extension/tests/browser/navigate.tool.test.ts` and `app/chrome-extension/tests/browser/screenshot.tool.test.ts`.
-
-**Post-report addendum (2026-05-09, mixed-tool revalidation):**
-
-- BUG-28 is fixed: added `minute|minutes|hour|hours` support to the relative time parser in `chrome_history`.
-- BUG-02 is fixed: whitespace/empty URL validation added to `chrome_network_request` with protocol check.
-- BUG-36 is fixed: `refMapCount` now counts actual refs in `pageContent` instead of using the interactive-only refMap array length.
-- BUG-24 is not reproducible: timeout handling already returns structured user-friendly errors via the `TimeoutError` class.
-
-**Post-report addendum (2026-05-09, error handling & validation revalidation):**
-
-- BUG-44 is fixed: file existence is now validated at the native server level before forwarding the upload to the extension. Nonexistent paths, directories, and unreadable files return clear errors.
-- BUG-43 is fixed: `chrome_handle_download` errors now return structured JSON `{ success: false, error: "..." }` instead of plain strings.
-- BUG-37 is fixed: `chrome_fill_or_select` schema now includes `anyOf: [{ required: ["selector"] }, { required: ["ref"] }]` and updated descriptions to enforce the selector/ref requirement at the schema level.
-- BUG-34 is fixed: `chrome_handle_dialog` now parses CDP errors and returns user-friendly structured JSON `{ success: false, error: "No dialog is currently showing." }` instead of raw CDP JSON.
+The 14 remaining open bugs are organized below into three fix batches by subsystem affinity, so each batch can be tackled in a single session.
 
 ---
 
-## `chrome_gif_recorder` (7 bugs)
+## Batch 1 — Performance tools (5 bugs)
 
-### BUG-10 · Recording silently crashes after start · High — NOT REPRODUCED (2026-04-25)
+Covers `performance_start_trace` and `performance_analyze_insight`. These tools share a tracing pipeline and can be improved together.
 
-**Description:** `action="start"` returns `success:true, isRecording:true`. A subsequent `action="status"` immediately returns `isRecording:false`. The recording crashes silently — no error message surfaced to the user.  
+### BUG-15 · `autoStop` ignores `durationMs`; runs 10× too long · High
+
+**Tool:** `performance_start_trace`  
+**Description:** `autoStop=true` with `durationMs=2000` ran for approximately 20 seconds instead of 2 seconds. The `autoStop` mechanism is unreliable — `durationMs` appears to be ignored in auto-stop mode.  
 **Steps to reproduce:**
 
 ```json
-{ "action": "start", "tabId": 187425763 }
-{ "action": "status", "tabId": 187425763 }
+{ "autoStop": true, "durationMs": 2000 }
 ```
 
-**Expected:** `isRecording:true` in status.  
-**Actual:** `isRecording:false` immediately after start.  
-**Suggested fix:** Surface crash/error from the recording worker; return `success:false` with a reason if recording fails to initialize.
-
-**Revalidation (2026-04-25):** Not reproduced on the current branch. The fixed-FPS start path already captures the first frame eagerly and now has regression coverage to ensure `status` remains active immediately after `start`.
+**Expected:** Trace stops automatically after ~2 seconds.  
+**Actual:** Trace ran for ~20 seconds.  
+**Suggested fix:** Fix the timer logic in auto-stop; ensure `durationMs` is properly wired to the stop-timer callback.
 
 ---
 
-### BUG-11 · `stop` breaks when `durationMs` auto-stop was used · High — FIXED (2026-04-25)
+### BUG-16 · No `tabId` parameter; cannot target background tabs · High
 
-**Description:** When GIF is started with `durationMs`, it auto-stops after the duration. If the caller then issues `action="stop"`, it gets `"No recording in progress"` — the start/stop workflow is broken when `durationMs` is used. The response gives no indication that the recording already ended.  
-**Suggested fix:** After auto-stop, `action="stop"` should return the finalized GIF result (or a clear "already stopped, here is the file" message).
-
-**Fix applied (2026-04-25):** Fixed-FPS auto-stop now caches the finalized stop result. A subsequent manual `action="stop"` returns that finalized result with `alreadyStopped:true` instead of failing with `"No recording in progress"`.
-
----
-
-### BUG-12 · `tabId` must be consistent but not enforced or documented · High — FIXED (2026-04-25)
-
-**Description:** When `auto_start` is used with a specific `tabId`, all subsequent actions (`capture`, `stop`, `status`) must use the same `tabId`. However, all these actions describe `tabId` as "default: active tab", implying it's always optional. Calling `capture` without `tabId` silently fails or captures the wrong tab.  
-**Suggested fix:** After `auto_start`, persist the `tabId` internally and use it automatically for all subsequent calls, OR document that `tabId` is required and must match.
-
-**Fix applied (2026-04-25):** The recorder now persists the `auto_start` tab and automatically reuses it for `capture`, `status`, and `stop` when `tabId` is omitted. Supplying a conflicting `tabId` now returns a clear error, and the shared schema docs were updated to describe the behavior.
+**Tool:** `performance_start_trace`  
+**Description:** The tool has no `tabId` parameter. It always records the active tab at call time. If the user switches tabs (or the AI calls any other tool that activates a different tab), trace data is from the wrong tab.  
+**Suggested fix:** Add `tabId` parameter consistent with all other tools.
 
 ---
 
-### BUG-32 · Reports wall-clock time, not GIF playback duration · Medium — FIXED (2026-04-25)
+### BUG-41 · `autoStop=true` — Incorrect hint in response · Low
 
-**Description:** The `durationMs` in the stop response is the wall-clock time the recording ran (e.g., 149720ms = ~150 seconds) rather than the actual GIF playback duration. At 5fps with 4 frames, the real playback is 800ms — not 150 seconds.  
-**Suggested fix:** Add a `playbackDurationMs` field (`frameCount / fps * 1000`) alongside or instead of wall-clock `durationMs`.
-
-**Fix applied (2026-04-25):** Stop and export responses now return playback timing explicitly via `playbackDurationMs`, preserve `durationMs` as the playback duration for compatibility, and expose the wall-clock value separately as `recordingElapsedMs`.
-
----
-
-### BUG-39 · `export` after `clear` — Misleading error message · Low — FIXED (2026-04-25)
-
-**Description:** Calling `action="export"` after `action="clear"` (when no recording was ever made) returns `"Use action='stop' to finish a recording first."` — but no recording was in progress. The error message guides the user to take a nonsensical action.  
-**Suggested fix:** Detect the "no data" state and return `"No GIF data available. Start a new recording first."`.
-
-**Fix applied (2026-04-25):** `action="export"` now returns `"No GIF data available. Start a new recording first."` when there is no cached GIF data.
+**Tool:** `performance_start_trace`  
+**Description:** When `autoStop:true`, the response still says `"Use performance_stop_trace to stop it"` — even though the trace will stop automatically without user intervention.  
+**Suggested fix:** Change to `"Trace will stop automatically after durationMs."`.
 
 ---
 
-### BUG-40 · `durationMs` in status response is misleading · Low — FIXED (2026-04-25)
+### BUG-30 · CWV values are stale from previous page load · Medium
 
-**Description:** In the `status` response, `durationMs` represents wall-clock recording time (e.g., 28239ms = 28 seconds since start), NOT any kind of expected playback duration. The field name is ambiguous.  
-**Suggested fix:** Rename to `recordingElapsedMs` in the status response to remove ambiguity.
-
-**Fix applied (2026-04-25):** Status responses now use `recordingElapsedMs` instead of `durationMs` for both fixed-FPS and auto-capture modes.
-
----
-
-### BUG-50 · `enhancedRenderingEnabled` not included in status response · Low — FIXED (2026-04-25)
-
-**Description:** When `auto_start` is called with `enhancedRendering` config, the `status` response does not include `enhancedRenderingEnabled: true`. The caller cannot verify whether enhanced rendering was activated. (The flag IS computed in `getAutoCaptureStatus()` but not forwarded through the `status` case in `gif-recorder.ts`.)  
-**Code reference:** `gif-recorder.ts` line 877–891 — status case omits `enhancedRenderingEnabled` field.  
-**Suggested fix:** Add `enhancedRenderingEnabled: status.enhancedRenderingEnabled` to the status case response.
-
-**Fix applied (2026-04-25):** Auto-capture `status` now forwards `enhancedRenderingEnabled` from `getAutoCaptureStatus()`.
+**Tool:** `performance_analyze_insight`  
+**Description:** `FirstMeaningfulPaint`, `DomContentLoaded`, and `NavigationStart` reflect the navigation that happened _before_ the trace started, not the current trace window. If the user navigated to the page then started a trace, the metrics still refer to the earlier load event.  
+**Suggested fix:** Only report metrics that fall within the trace's `startTime`–`endTime` window.
 
 ---
 
-## `chrome_computer` (5 bugs)
+### BUG-31 · Raw monotonic timestamps, not human-readable · Medium
 
-### BUG-08 · Screenshot pixel coords ≠ viewport CSS coords · High — FIXED (2026-04-25)
-
-**Also affects:** `chrome_click_element`  
-**Description:** Screenshot images are captured in physical pixels (scaled by DPR=1.09375), but click coordinates must be in CSS viewport pixels. When an AI reads pixel positions from a screenshot and passes them to a click action, the click lands in the wrong place. With DPR>1, all clicks are systematically offset.  
-**Root cause:** `chrome_screenshot` captures at `image_width = css_width × DPR`; click coordinates are in CSS pixels. No coordinate-space documentation.  
-**Impact:** Every coordinate-based click from a screenshot is wrong by a factor of DPR.  
-**Suggested fix:** Either scale screenshots down to CSS-pixel space before returning, or introduce explicit coordinate-space docs and a transformation helper. `chrome_computer` partially handles this via `screenshotContextManager` but the mismatch persists for `chrome_click_element`.
-
-**Fix applied (2026-04-25):** Screenshot context now records the actual emitted image dimensions together with helper-derived page details, so screenshot-space coordinates taken from the returned image scale back to the correct browser viewport coordinates during `chrome_computer` actions. Revalidation used the actual saved screenshot pixels rather than pre-screenshot `read_page` coordinates, because the debugger infobar can transiently change the viewport during capture.
+**Tool:** `performance_analyze_insight`  
+**Description:** `FirstMeaningfulPaint`, `DomContentLoaded`, `NavigationStart` are returned as raw monotonic Chrome timestamps (e.g. `5274829.5`), not as navigation-relative milliseconds or ISO dates. These values are unusable without the corresponding trace `startTime` for subtraction.  
+**Suggested fix:** Convert to navigation-relative milliseconds (`value - navigationStart`) before returning.
 
 ---
 
-### BUG-09 · `type` silently fails after `left_click` · High — FIXED (2026-04-25)
+## Batch 2 — Console tool (4 bugs)
 
-**Description:** `action="type"` after `action="left_click"` on an empty text field reports `success:true` but no text appears. The same field successfully accepts text after `action="triple_click"` (which selects then replaces). The `left_click + type` pattern is the natural usage and is not documented as broken.  
-**Steps to reproduce:**
-
-```json
-{ "action": "left_click", "coordinates": {"x":160,"y":20}, "tabId": 187425763 }
-{ "action": "type", "text": "Hello", "tabId": 187425763 }
-```
-
-**Expected:** "Hello" typed into the field.  
-**Actual:** Field remains empty.  
-**Suggested fix:** Investigate focus handling after synthetic click; ensure focus is set before dispatching key events.
-
-**Fix applied (2026-04-25):** Coordinate `left_click` now explicitly focuses the clicked editable target, and the `type` fallback preserves the original `tabId` and uses text-mode keyboard input on that same tab. Revalidation confirmed `left_click` followed by `type` writes into the intended text field.
-
----
-
-### BUG-38 · `wait` action silently clamps `duration=60` to 30; no warning · Low — FIXED (2026-04-25)
-
-**Description:** `action="wait"` with `duration=60` is silently clamped to 30 seconds (max). The response shows `"duration":30` with no message that the original value was truncated.  
-**Suggested fix:** Add `"warning": "Duration was clamped from 60s to maximum 30s."` to the response.
-
-**Fix applied (2026-04-25):** `action="wait"` now returns a `warning` field whenever the requested duration is clamped to the 30-second maximum.
-
----
-
-### BUG-46 · API parameter inconsistency: `coordinate` array vs `coordinates` object · Low — FIXED (2026-04-25)
-
-**Description:** Hover with an array `coordinate: [x, y]` silently fails with "Provide ref or selector or coordinates for hover." The correct form is `coordinates: { "x": N, "y": N }` (an object). The error message says "or coordinates" without explaining the required format. This is confusing given other tools use different coordinate conventions.
-
-**Fix applied (2026-04-25):** Raw MCP calls that pass `coordinate: [x, y]` now receive a format-specific validation error: `Invalid parameter "coordinate". Use coordinates: { "x": N, "y": N }.` The shared tool schema/docs were also updated to make the object shape explicit.
-
----
-
-### BUG-51 · Selector-based hover fails where ref-based hover works · High — NOT REPRODUCED (2026-04-25)
-
-**Description:** `action="hover"` works when targeting the visible submit control by `ref`, but fails when targeting the same control by CSS selector. On `https://httpbin.org/forms/post`, both `button[type=submit]` and `input[type=submit]` return `"Provide ref or selector or coordinates for hover, or failed to resolve target"` even though the visible "Submit order" control is present and ref-based hover succeeds.  
-**Steps to reproduce:**
-
-```json
-{ "action": "hover", "selector": "button[type=submit]", "tabId": 187425763 }
-```
-
-**Expected:** Hover event dispatched to the visible submit control.  
-**Actual:** Target resolution fails.  
-**Suggested fix:** Reuse the same selector resolution path as `click`/`fill`, or surface a more specific resolution error that shows whether the selector matched zero elements or matched an unsupported target.
-
-**Revalidation (2026-04-25):** The original selectors in the report do not match the page under test. `https://httpbin.org/forms/post` exposes a plain `<button>Submit order</button>` without `type="submit"`, so both `button[type=submit]` and `input[type=submit]` correctly return no match. On the current branch, selector-based hover succeeds with the valid selector `button`, and the fallback path was hardened to surface selector-resolution failures more explicitly.
-
----
-
-## `chrome_console` (4 bugs)
+All four bugs are in `chrome_console`. They can be addressed with a single pass over the console capture and response logic.
 
 ### BUG-25 · Extension-internal logs leak into user output · Medium
 
@@ -233,121 +112,13 @@ These are not page messages and pollute every result.
 
 ---
 
-## `chrome_screenshot` (2 bugs)
+## Batch 3 — Data consistency & formatting (5 bugs)
 
-### BUG-20 · `fullPage` + `background` — silently ignores `fullPage` · Medium — NOT REPRODUCED (2026-04-26)
-
-**Description:** `fullPage:true` with `background:true` silently falls back to viewport-only capture. No warning in the response. Users expect a full-page screenshot.  
-**Suggested fix:** Return a warning field `{ "warning": "fullPage is not supported with background=true; viewport-only screenshot captured." }` or implement full-page CDP capture.
-
-**Revalidation (2026-04-26):** Not reproduced as originally written. On fresh tabs, `fullPage:true` continued to return tall full-page captures rather than viewport-only output. During verification on a background tab, a different issue was observed where Chrome stitched the visible tab instead of the requested background tab; that behavior does not match this original report and should be tracked separately.
-
----
-
-### BUG-52 · Default screenshot response saves a file instead of returning MCP image content · Medium — FIXED (2026-04-25)
-
-**Description:** Calling `chrome_screenshot` without `storeBase64`/`savePng` flags returns saved-file metadata such as `fileSaved:true`, `filename`, and `fullPath`, with `base64:null`. Callers that simply ask for a screenshot receive a Downloads path instead of MCP `ImageContent`, which breaks the expected default visual workflow.  
-**Steps to reproduce:**
-
-```json
-{ "tabId": 187468189 }
-```
-
-**Expected:** Screenshot returned as MCP `ImageContent` by default; file saving happens only when explicitly requested.  
-**Actual:** PNG is saved to Downloads and the response is text metadata for the saved file.  
-**Fix applied:** Defaulted the runtime executor and shared tool schema/docs to `storeBase64:true` and `savePng:false`, preserving file output only for explicit opt-in.
-
----
-
-### BUG-47 · `fullPage=true` corrupts fixed-position elements · Low — FIXED (2026-04-26)
-
-**Description:** For pages with fixed sidebars or navbars, `fullPage:true` produces screenshots where fixed-position elements disappear or reposition incorrectly. The viewport screenshot shows them correctly; the full-page version does not.  
-**Suggested fix:** Document that full-page capture may distort fixed/sticky elements, or restore them after scrolled capture.
-
-**Fix applied (2026-04-26):** Full-page capture now returns an explicit `warnings` array whenever fixed/sticky elements are temporarily hidden during stitching, so callers can detect the distortion risk and fall back to a viewport screenshot when they need exact fixed-UI preservation. Regression coverage was added in `app/chrome-extension/tests/browser/screenshot.tool.test.ts`.
-
----
-
-## `chrome_navigate` (3 bugs)
-
-### BUG-29 · `newWindow` — Response schema differs between modes · Medium — FIXED (2026-04-26)
-
-**Description:** `newWindow:false` response has `tabId` at the top level; `newWindow:true` response has `tabId` nested inside `tabs[0].tabId`. Consuming code must branch on which mode was used.  
-**Suggested fix:** Normalize: always include `tabId` at the top level in all navigate responses.
-
-**Fix applied (2026-04-26):** `newWindow:true` responses now include a top-level `tabId` for the created tab while preserving the existing `tabs` array for compatibility. Regression coverage was added in `app/chrome-extension/tests/browser/navigate.tool.test.ts`.
-
----
-
-### BUG-35 · `about:blank` — Exposes internal URL pattern in error · Low — FIXED (2026-04-26)
-
-**Description:** Navigating to `about:blank` returns `"Error navigating to URL: Invalid url pattern 'about:///*'"` — exposing an internal URL validation pattern to the user.  
-**Suggested fix:** allow about:blank as a valid URL. also allow ip addresses, localhost, and other common testing URLs.
-
-**Fix applied (2026-04-26):** `about:blank` now bypasses match-pattern tab lookup and is treated as a valid navigation target, so the internal `about:///*` validation detail is no longer exposed. Regression coverage was added in `app/chrome-extension/tests/browser/navigate.tool.test.ts`.
-
----
-
-### BUG-49 · `back`/`forward` don't confirm the resulting URL in response · Low — NOT REPRODUCED (2026-04-26)
-
-**Description:** After `action="back"` or `action="forward"`, the response doesn't include the URL the tab ended up on. The caller is left unaware of the current URL state.  
-**Suggested fix:** Include `finalUrl` in the navigation response for history traversal actions.
-
-**Revalidation (2026-04-26):** Not reproduced as originally written because real MCP history traversal currently fails earlier with `Cannot find a next page in history`, including on tabs with normal link-based navigation history. Since the navigation action did not succeed, the missing-`finalUrl` response shape could not be observed on the current branch.
-
----
-
-## `performance_start_trace` (3 bugs)
-
-### BUG-15 · `autoStop` ignores `durationMs`; runs 10× too long · High
-
-**Description:** `autoStop=true` with `durationMs=2000` ran for approximately 20 seconds instead of 2 seconds. The `autoStop` mechanism is unreliable — `durationMs` appears to be ignored in auto-stop mode.  
-**Steps to reproduce:**
-
-```json
-{ "autoStop": true, "durationMs": 2000 }
-```
-
-**Expected:** Trace stops automatically after ~2 seconds.  
-**Actual:** Trace ran for ~20 seconds.  
-**Suggested fix:** Fix the timer logic in auto-stop; ensure `durationMs` is properly wired to the stop-timer callback.
-
----
-
-### BUG-16 · No `tabId` parameter; cannot target background tabs · High
-
-**Description:** The tool has no `tabId` parameter. It always records the active tab at call time. If the user switches tabs (or the AI calls any other tool that activates a different tab), trace data is from the wrong tab.  
-**Suggested fix:** Add `tabId` parameter consistent with all other tools.
-
----
-
-### BUG-41 · `autoStop=true` — Incorrect hint in response · Low
-
-**Description:** When `autoStop:true`, the response still says `"Use performance_stop_trace to stop it"` — even though the trace will stop automatically without user intervention.  
-**Suggested fix:** Change to `"Trace will stop automatically after durationMs."`.
-
----
-
-## `performance_analyze_insight` (2 bugs)
-
-### BUG-30 · CWV values are stale from previous page load · Medium
-
-**Description:** `FirstMeaningfulPaint`, `DomContentLoaded`, and `NavigationStart` reflect the navigation that happened _before_ the trace started, not the current trace window. If the user navigated to the page then started a trace, the metrics still refer to the earlier load event.  
-**Suggested fix:** Only report metrics that fall within the trace's `startTime`–`endTime` window.
-
----
-
-### BUG-31 · Raw monotonic timestamps, not human-readable · Medium
-
-**Description:** `FirstMeaningfulPaint`, `DomContentLoaded`, `NavigationStart` are returned as raw monotonic Chrome timestamps (e.g. `5274829.5`), not as navigation-relative milliseconds or ISO dates. These values are unusable without the corresponding trace `startTime` for subtraction.  
-**Suggested fix:** Convert to navigation-relative milliseconds (`value - navigationStart`) before returning.
-
----
-
-## `chrome_network_capture` (2 bugs)
+Cross-cutting issues: schema normalization, coordinate-space alignment, and minor formatting improvements across several tools. These are independent, low-risk fixes that can be batched together.
 
 ### BUG-13 · Inconsistent request schema between backends · High
 
+**Tool:** `chrome_network_capture`  
 **Description:** The `webRequest` backend and `debugger` backend return requests with different schemas:
 
 - `webRequest`: `{ status: 200, requestId: "12345" }`
@@ -360,177 +131,34 @@ These are not page messages and pollute every result.
 
 ### BUG-33 · `tabUrl` stale after navigation during capture · Medium
 
+**Tool:** `chrome_network_capture`  
 **Description:** The `tabUrl` and `tabTitle` in the stop response reflect the URL at capture _start_ time. If the user navigated during the capture window, the stop response still shows the old URL.  
 **Suggested fix:** Read the tab URL at stop time, not start time; or include both `startUrl`/`endUrl`.
 
 ---
 
-## `chrome_read_page` (2 bugs)
-
 ### BUG-14 · Viewport coordinates don't match screenshot coordinates · High
 
-**Related to:** BUG-08.  
+**Tool:** `chrome_read_page`  
 **Description:** `chrome_read_page` reports element positions in CSS viewport pixels (e.g., viewport width=880px), while `chrome_screenshot` images capture in physical pixels (~674px wide at DPR=1.09375 scaled output). Coordinates from `read_page` cannot be directly used with coordinate-based tools after a screenshot without transformation.  
 **Suggested fix:** Unify the coordinate space across all tools.
 
 ---
-
-### BUG-36 · `refMapCount` off by one · Low — FIXED (2026-05-09)
-
-**Description:** `refMapCount` consistently reports one less than the actual number of refs in the response. E.g., `refMapCount=13` but refs `ref_1` through `ref_14` (=14 refs) are returned. Confirmed across multiple pages.  
-**Suggested fix:** Fix the count: `refMapCount = Object.keys(refMap).length` (post-insertion count, not pre-insertion).
-
-**Revalidation (2026-05-09):** Reproduced — `refMapCount` was 78 while `pageContent` contained 172 refs (ref_1 through ref_172). Root cause: `refMapCount` used `resp.refMap.length` which only counts interactive elements pushed into the refMap array, but `pageContent` assigns refs to ALL included elements. Fixed by counting actual `[ref=ref_N]` occurrences in the `pageContent` string instead of relying on the refMap array length.
-
----
-
-## `chrome_click_element` (1 bug)
-
-### BUG-07 · `input[type=submit]` selector fails despite visible element · High — NOT REPRODUCED
-
-**Status: NOT REPRODUCED (2026-04-05)**
-
-**Description:** The selector `input[type=submit]` returns "Element not found" even when `<input type="submit">` is clearly visible on the page (confirmed via screenshot and `chrome_read_page`). Other selectors on the same page work correctly.  
-**Steps to reproduce:**
-
-```json
-{ "selector": "input[type=submit]", "tabId": 187425763 }
-```
-
-**Expected:** Submit button clicked.  
-**Actual:** `"Element not found: input[type=submit]"`  
-**Suggested fix:** Debug attribute selector matching in the element resolver.
-
-**Investigation (2026-04-05):**
-
-The bug could not be reproduced. The original test page (httpbin.org/forms/post) uses `<button>Submit order</button>`, not `<input type="submit">`. The CSS attribute selector `input[type=submit]` correctly returns no match because no such element exists on that page. When tested on a page with an actual `<input type="submit">` element, `chrome_click_element` finds and clicks it successfully.
-
-The likely cause of the original report: `chrome_read_page` shows the button as `button "Submit order" [ref=ref_14]`, which could be misread as `<input type="submit">` by an AI agent. The selector `input[type=submit]` was never going to match a `<button>` element.
-
-**Improvements applied nonetheless:**
-
-- [click-helper.js](../../app/chrome-extension/inject-scripts/click-helper.js) — Replaced `document.querySelector()` with `querySelectorDeep()` for shadow DOM traversal (parity with accessibility-tree-helper.js). Also fixed `isElementVisible()` to correctly handle elements inside shadow roots whose host is returned by `document.elementFromPoint()`.
-
----
-
-## `chrome_network_request` (1 bug)
-
-### BUG-02 · Whitespace URL silently fetches wrong resource (Security) · Critical — FIXED (2026-05-09)
-
-**Description:** Passing a whitespace-only URL (`"   "`) returns `success:true` with actual content fetched from the active tab's URL. No URL validation is performed; the empty/whitespace string is silently resolved to the current page URL. This can expose unintended page data or mislead the AI into using wrong content.  
-**Steps to reproduce:**
-
-```json
-{ "url": "   ", "method": "GET" }
-```
-
-**Expected:** Validation error — "URL is required."  
-**Actual:** `success:true` with content from the active tab's URL.  
-**Suggested fix:** Trim and validate the URL before processing. Reject blank/whitespace strings with a clear error.
-
-**Revalidation (2026-05-09):** Reproduced — whitespace URL `"   "` returned `success:true` with HTTP 200 content from the active tab. Fixed by trimming the URL before validation and adding a protocol check (`http://` or `https://` required). Whitespace-only or protocol-less URLs now return clear validation errors.
-
----
-
-## `chrome_javascript` (1 bug)
-
-### BUG-24 · Timeout returns raw CDP error code · Medium — NOT REPRODUCED (2026-05-09)
-
-**Description:** When a script times out, the error returned is `{"code":-32603,"message":"Internal error"}` — raw CDP JSON. The caller gets no indication the issue was a timeout.  
-**Suggested fix:** Catch the timeout condition and return a user-friendly `"Script timed out after Xms"` message.
-
-**Revalidation (2026-05-09):** Not reproduced on the current branch. Testing with `chrome_javascript` using `timeoutMs=2000` and a 20-second `setTimeout` returned a structured, user-friendly response: `{"success":false,"engine":"cdp","error":{"kind":"timeout","message":"Execution timed out after 3000ms"}}`. The `TimeoutError` class and proper error classification in `javascript.ts` already handle this case correctly.
-
----
-
-## `chrome_history` (1 bug)
-
-### BUG-28 · Time format "1 hour ago" unsupported; misleading error message · Medium — FIXED (2026-05-09)
-
-**Description:** The tool description implies flexible relative time queries. However, "1 hour ago" fails. Only `"X days/weeks/months/years ago"` works. The error message reveals the internal supported format list but omits hours entirely. This suggests hours were never implemented.  
-**Steps to reproduce:**
-
-```json
-{ "query": "github", "startTime": "1 hour ago" }
-```
-
-**Expected:** Results from the last hour.  
-**Actual:** Error — `"Please use 'X days/weeks/months/years ago' format."`  
-**Suggested fix:** Add hour support to the time parser, or explicitly document the supported granularities.
-
-**Revalidation (2026-05-09):** Reproduced — the regex in `parseDateString` only matched `day|days|week|weeks|month|months|year|years`. Fixed by adding `minute|minutes|hour|hours` to the relative time pattern and corresponding `subMinutes`/`subHours` handlers. Schema descriptions were also updated to document the newly supported granularities.
-
----
-
-## `chrome_handle_dialog` (1 bug)
-
-### BUG-34 · Returns raw CDP JSON error object · Medium — FIXED (2026-05-09)
-
-**Description:** When no dialog is showing, the error returned is `{"code":-32602,"message":"No dialog is showing"}` — raw CDP JSON object. Not user-friendly.  
-**Suggested fix:** Transform to `{ "success": false, "error": "No dialog is currently showing." }`.
-
-**Revalidation (2026-05-09):** Reproduced — `chrome_handle_dialog` with `action: "accept"` and no active dialog returned `Failed to handle dialog: {"code":-32602,"message":"No dialog is showing"}`. Fixed by parsing known CDP error codes in `dialog.ts` and returning structured JSON: `{ success: false, error: "No dialog is currently showing." }`.
-
----
-
-## `chrome_fill_or_select` (1 bug)
-
-### BUG-37 · Schema doesn't enforce `selector`/`ref` requirement · Low — FIXED (2026-05-09)
-
-**Description:** The input schema marks only `value` as required. At runtime the tool also requires either `selector` or `ref`. The schema mismatch means AI/LLM callers won't be warned by schema validation that they need to provide a target.  
-**Suggested fix:** Add `oneOf: [required: ["selector"], required: ["ref"]]` to the schema.
-
-**Revalidation (2026-05-09):** Reproduced — calling `chrome_fill_or_select` with only `{ value: "test" }` passed schema validation but failed at runtime with `Invalid parameters: Provide ref or selector`. Fixed by adding `anyOf: [{ required: ["selector"] }, { required: ["ref"] }]` to the tool schema and updating property descriptions to explicitly state that either `selector` or `ref` is required.
-
----
-
-## `chrome_handle_download` (1 bug)
-
-### BUG-43 · Error format is plain string, not structured JSON · Low — FIXED (2026-05-09)
-
-**Description:** Timeout error is returned as a plain string: `"Handle download failed: Download wait timed out"` — inconsistent with other tools that return structured JSON error objects.  
-**Suggested fix:** Return `{ "success": false, "error": "Download wait timed out" }`.
-
-**Revalidation (2026-05-09):** Reproduced — `chrome_handle_download` with `timeoutMs: 1000` returned the plain string `"Handle download failed: Download wait timed out"`. Fixed by replacing `createErrorResponse` in the catch block with a structured JSON response: `{ success: false, error: "Download wait timed out" }`.
-
----
-
-## `chrome_upload_file` (1 bug)
-
-### BUG-44 · Accepts nonexistent file paths and reports success · Low — FIXED (2026-05-09)
-
-**Description:** Providing a path to a nonexistent file (`/tmp/nonexistent-xyz.txt`) returns `{ "success": true, "message": "File(s) uploaded successfully" }`. The file input in the browser shows the filename but no actual file data exists. No error is surfaced.  
-**Steps to reproduce:**
-
-```json
-{ "filePath": "/tmp/nonexistent-xyz.txt", "selector": "#file-upload", "tabId": 187425763 }
-```
-
-**Expected:** Error — "File not found at path: /tmp/nonexistent-xyz.txt"  
-**Actual:** `success: true`  
-**Suggested fix:** Validate file existence on the native server before passing to the extension.
-
-**Revalidation (2026-05-09):** Reproduced — `chrome_upload_file` with nonexistent `/tmp/nonexistent-xyz-12345.txt` returned `success: true`. Fixed by adding file existence, type, and readability pre-validation in the native server's `register-tools.ts` before forwarding the tool call to the extension. Nonexistent paths now return `"File not found at path: ..."`, directory paths return `"Path is not a file: ..."`, and unreadable files return `"File is not accessible: ..."`.
-
----
-
-## `chrome_request_element_selection` (1 bug)
-
-### BUG-45 · `timeoutMs` silently clamped to minimum 10000ms · Low
-
-**Description:** Passing `timeoutMs=3000` (3 seconds) results in the session timing out after 10 seconds. The small timeout was silently clamped to a minimum of 10000ms with no warning to the caller.  
-**Schema claims:** Default 180000ms, Maximum 600000ms — no minimum is documented.  
-**Suggested fix:** Document the minimum (if any) or honor the requested value.
-
----
-
-## `chrome_bookmark_*` (1 bug)
 
 ### BUG-42 · `dateAdded` as raw Unix ms timestamp · Low
 
 **Tool:** `chrome_bookmark_search`, `chrome_bookmark_add`  
 **Description:** `dateAdded` is returned as a raw Unix millisecond timestamp (e.g., `1733753760000`). Not human-readable; AI callers have to convert manually.  
 **Suggested fix:** Add a `dateAddedIso` field with ISO 8601 string, or convert `dateAdded` to ISO directly.
+
+---
+
+### BUG-45 · `timeoutMs` silently clamped to minimum 10000ms · Low
+
+**Tool:** `chrome_request_element_selection`  
+**Description:** Passing `timeoutMs=3000` (3 seconds) results in the session timing out after 10 seconds. The small timeout was silently clamped to a minimum of 10000ms with no warning to the caller.  
+**Schema claims:** Default 180000ms, Maximum 600000ms — no minimum is documented.  
+**Suggested fix:** Document the minimum (if any) or honor the requested value.
 
 ---
 
