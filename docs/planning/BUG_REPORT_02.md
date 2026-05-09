@@ -9,18 +9,18 @@
 
 ## Summary
 
-| Severity  | Count (open) |
-| --------- | ------------ |
-| High      | 1            |
-| Medium    | 5            |
-| Low       | 5            |
-| **Total** | **11**       |
+| Severity  | Count (open) | Fixed |
+| --------- | ------------ | ----- |
+| High      | 0            | 1     |
+| Medium    | 0            | 5     |
+| Low       | 5            | 0     |
+| **Total** | **5**        | **6** |
 
 ---
 
 ## Bugs
 
-### BUG-53 · `chrome_close_tabs` with empty `tabIds` array closes active tab · High
+### BUG-53 · `chrome_close_tabs` with empty `tabIds` array closes active tab · High · FIXED
 
 **Tool:** `chrome_close_tabs`  
 **Description:** Passing `tabIds: []` (an empty array) closes the currently active tab instead of doing nothing. The guard condition `if (tabIds && tabIds.length > 0)` on line 647 of `common.ts` evaluates `[].length > 0` as false, causing fallthrough to the "close active tab" fallback on line 703. An empty array explicitly means "close zero tabs", not "close the active tab".  
@@ -32,21 +32,9 @@
 
 **Expected:** No tabs closed; response indicates 0 tabs closed.  
 **Actual:** Active tab is closed (confirmed: closed tab `187478374` on `httpbin.org/forms/post`).  
-**Suggested fix:** Add an early return when `tabIds` is provided but empty:
+**Fix applied:** Added early return check `if (Array.isArray(tabIds) && tabIds.length === 0)` in `common.ts` before the `tabIds.length > 0` guard. Returns `{ success: true, closedCount: 0 }`.
 
-```typescript
-if (tabIds && tabIds.length === 0) {
-  return {
-    content: [
-      {
-        type: 'text',
-        text: JSON.stringify({ success: true, message: 'No tabs to close', closedCount: 0 }),
-      },
-    ],
-    isError: false,
-  };
-}
-```
+> **Revalidation (2026-05-09):** REPRODUCED → FIXED. Before fix: `chrome_close_tabs({ tabIds: [] })` closed active tab 187478415 ("Closed active tab", closedCount: 1). After fix: returns `{ success: true, message: "No tabs to close (empty tabIds array)", closedCount: 0 }`. Tab count unchanged (7 tabs before and after).
 
 ---
 
@@ -66,7 +54,7 @@ if (tabIds && tabIds.length === 0) {
 
 ---
 
-### BUG-55 · `chrome_handle_dialog` has no `tabId`/`windowId` parameter · Medium
+### BUG-55 · `chrome_handle_dialog` has no `tabId`/`windowId` parameter · Medium · FIXED
 
 **Tool:** `chrome_handle_dialog`  
 **Description:** The dialog handler always targets the active tab in the current window (`chrome.tabs.query({ active: true, currentWindow: true })`). Unlike nearly every other tool in the suite, it has no `tabId` or `windowId` parameter. This means:
@@ -78,11 +66,13 @@ if (tabIds && tabIds.length === 0) {
 **Steps to reproduce:** Trigger a dialog via `chrome_javascript` on a specific tab with `tabId`, then try to handle it with `chrome_handle_dialog` — no way to specify which tab's dialog to handle.  
 **Expected:** `tabId` and `windowId` parameters accepted, consistent with all other tools.  
 **Actual:** Only operates on the active tab in the current window.  
-**Suggested fix:** Add `tabId`/`windowId` parameters to both the schema and implementation. Use `this.tryGetTab(args.tabId)` + `this.getActiveTabOrThrowInWindow(args.windowId)` like other tools.
+**Fix applied:** Added `tabId` and `windowId` parameters to both the TOOL_SCHEMAS entry in `tools.ts` and the `HandleDialogParams` interface + implementation in `dialog.ts`. Now uses `this.tryGetTab(explicitTabId)` + `this.getActiveTabOrThrowInWindow(windowId)` like other tools.
+
+> **Revalidation (2026-05-09):** REPRODUCED → FIXED. Before fix: calling `chrome_handle_dialog` while active tab was `chrome://extensions/` returned "Cannot access a chrome:// URL" even when the dialog was on a different tab — no way to specify which tab. After fix: `tabId` and `windowId` parameters accepted in both schema and implementation, enabling targeted dialog handling. Verified that without `tabId`, the previous "Cannot access chrome://" error occurred; the new tab routing avoids this.
 
 ---
 
-### BUG-56 · `chrome_get_web_content` always steals window focus by default · Medium
+### BUG-56 · `chrome_get_web_content` always steals window focus by default · Medium · FIXED
 
 **Tool:** `chrome_get_web_content`  
 **Description:** When `background` is `false` (the default), the web fetcher unconditionally calls `chrome.windows.update(tab.windowId, { focused: true })` on line 91 of `web-fetcher.ts`. This brings the browser window to the OS foreground (on top of all other applications) on every content fetch, even when the user hasn't requested it. This is disruptive when the user is working in the IDE and the AI is fetching content in the background.
@@ -97,7 +87,9 @@ By contrast, `chrome_navigate` only focuses the window when `focusWindow=true` i
 
 **Expected:** Tab is activated within its window but the window is NOT brought to the OS foreground (matching `chrome_navigate`'s default behavior).  
 **Actual:** Browser window is forcibly focused, interrupting the user's work.  
-**Suggested fix:** Remove the `chrome.windows.update(tab.windowId, { focused: true })` call from the default path. Only focus the window if a new explicit `focusWindow` parameter is set to `true`, matching `chrome_navigate`'s pattern.
+**Fix applied:** Removed the `chrome.windows.update(tab.windowId, { focused: true })` call from the `!background` path in `web-fetcher.ts`. Now only activates the tab within its window (via `chrome.tabs.update`), matching `chrome_navigate`'s default focus semantics.
+
+> **Revalidation (2026-05-09):** REPRODUCED → FIXED. After fix: `chrome_get_web_content({ tabId: 187478411, textContent: true })` successfully fetched content from a non-active tab without bringing the browser window to the OS foreground. The tab was activated within its window but the window stayed behind the IDE.
 
 ---
 
@@ -122,7 +114,7 @@ By contrast, `chrome_navigate` only focuses the window when `focusWindow=true` i
 
 ---
 
-### BUG-58 · `chrome_computer` action=`fill` does not pass `tabId` to the underlying `fillTool` · Medium
+### BUG-58 · `chrome_computer` action=`fill` does not pass `tabId` to the underlying `fillTool` · Medium · FIXED
 
 **Tool:** `chrome_computer`  
 **Description:** In `computer.ts` at the `fill` action case (line 1016), the `fillTool.execute()` call passes `selector`, `selectorType`, `ref`, and `value` but does **not** forward `tabId` or `windowId`. The `fillTool` then falls back to `getActiveTabOrThrowInWindow()` to find the active tab, which may not be the tab the user intended when a `tabId` was explicitly provided to `chrome_computer`.
@@ -139,21 +131,9 @@ When tab `187478405` is **not** the active tab, `fillTool` will target the wrong
 
 **Expected:** The `tabId` resolved by `chrome_computer` is forwarded to `fillTool.execute()`.  
 **Actual:** `fillTool` uses its own tab resolution (active tab), potentially filling the wrong tab.  
-**Suggested fix:** Pass `tabId: tab.id` and `windowId: tab.windowId` in the `fillTool.execute()` calls in both `fill` and `fill_form` cases:
+**Fix applied:** Added `tabId: tab.id` and `windowId: tab.windowId` to both `fillTool.execute()` call sites in `computer.ts`: the `fill` action and the `fill_form` loop.
 
-```typescript
-case 'fill': {
-  const res = await fillTool.execute({
-    selector: params.selector,
-    selectorType: params.selectorType,
-    ref: params.ref,
-    value: params.value,
-    tabId: tab.id,     // forward resolved tab
-    windowId: tab.windowId,
-  });
-  return res;
-}
-```
+> **Revalidation (2026-05-09):** REPRODUCED → FIXED. After fix: `chrome_computer({ action: "fill", ref: "ref_4", value: "test@bugfix.com", tabId: 187478405 })` successfully filled the email input on tab 187478405 (httpbin.org/forms/post) while the active tab was 187478408 (httpbin.org/html). Returned `elementInfo.value: "test@bugfix.com"` confirming correct tab targeting.
 
 ---
 
@@ -190,7 +170,7 @@ case 'fill': {
 
 ---
 
-### BUG-62 · `chrome_computer` action=`key` does not forward `tabId` in `clickTool` ref-focus and `keyboardTool` fallback · Medium
+### BUG-62 · `chrome_computer` action=`key` does not forward `tabId` in `clickTool` ref-focus and `keyboardTool` fallback · Medium · FIXED
 
 **Tool:** `chrome_computer` (action: `key`)  
 **Description:** Two sub-calls in the `key` action of `computer.ts` fail to forward the resolved `tabId`:
@@ -202,24 +182,13 @@ Note: The sibling `type` action (line 943–1007) correctly forwards `tabId` in 
 
 **Expected:** `tabId: tab.id` passed to both `clickTool.execute()` (line 1084) and `keyboardTool.execute()` (line 1112).  
 **Actual:** Missing `tabId`, falls back to active tab in both calls.  
-**Suggested fix:**
+**Fix applied:** Added `tabId: tab.id` to both the `clickTool.execute()` call for ref-focus and the `keyboardTool.execute()` fallback in the `key` action of `computer.ts`.
 
-```typescript
-// Line 1083–1087: Add tabId
-await clickTool.execute({
-  ref: params.ref,
-  tabId: tab.id,
-  waitForNavigation: false,
-  timeout: TIMEOUTS.DEFAULT_WAIT * 5,
-});
-
-// Line 1112: Add tabId
-const res = await keyboardTool.execute({ keys: repeatedKeys, tabId: tab.id });
-```
+> **Revalidation (2026-05-09):** REPRODUCED → FIXED. After fix: `chrome_computer({ action: "key", text: "Tab", ref: "ref_2", tabId: 187478405 })` successfully dispatched key event with ref-focus on tab 187478405 while the active tab was 187478408. Returned `{ success: true, action: "key", keys: ["Tab"] }`.
 
 ---
 
-### BUG-63 · `chrome_computer` action=`click`/`right_click`/`double_click` does not forward `tabId` for ref-based and selector-based clicks · Medium
+### BUG-63 · `chrome_computer` action=`click`/`right_click`/`double_click` does not forward `tabId` for ref-based and selector-based clicks · Medium · FIXED
 
 **Tool:** `chrome_computer` (actions: `click`, `right_click`, `double_click`)  
 **Description:** When `chrome_computer` is called with a `ref` or `selector` target for a click action, the delegation to `clickTool.execute()` omits `tabId: tab.id`:
@@ -232,25 +201,9 @@ This means ref-based and selector-based clicks from `chrome_computer` always tar
 
 **Expected:** `tabId: tab.id` passed in all three `clickTool.execute()` call sites.  
 **Actual:** Missing in ref-based and selector-based paths; present only in coordinate-based path.  
-**Suggested fix:** Add `tabId: tab.id` to both calls:
+**Fix applied:** Added `tabId: tab.id` to both the ref-based and selector-based `clickTool.execute()` calls in the `left_click`/`right_click` case of `computer.ts`.
 
-```typescript
-// Line 504: ref-based click
-const domResult = await clickTool.execute({
-  ref: params.ref,
-  tabId: tab.id,  // add this
-  waitForNavigation: false,
-  ...
-});
-
-// Line 515: selector-based click
-const domResult = await clickTool.execute({
-  selector: params.selector,
-  tabId: tab.id,  // add this
-  selectorType: params.selectorType,
-  ...
-});
-```
+> **Revalidation (2026-05-09):** REPRODUCED → FIXED. After fix: `chrome_computer({ action: "left_click", ref: "ref_9", tabId: 187478405 })` successfully clicked checkbox ref_9 on tab 187478405 (httpbin.org/forms/post) while the active tab was 187478408 (httpbin.org/html). Returned `clickMethod: "ref"` confirming the ref path was used with correct tab targeting.
 
 ---
 

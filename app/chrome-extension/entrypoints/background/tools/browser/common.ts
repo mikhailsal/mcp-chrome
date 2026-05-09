@@ -643,6 +643,23 @@ class CloseTabsTool extends BaseBrowserToolExecutor {
         };
       }
 
+      // Empty array explicitly means "close zero tabs" — return early
+      if (Array.isArray(tabIds) && tabIds.length === 0) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                success: true,
+                message: 'No tabs to close (empty tabIds array)',
+                closedCount: 0,
+              }),
+            },
+          ],
+          isError: false,
+        };
+      }
+
       // If tabIds are provided, close those tabs
       if (tabIds && tabIds.length > 0) {
         console.log(`Closing tabs with IDs: ${tabIds.join(', ')}`);

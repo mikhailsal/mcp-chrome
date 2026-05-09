@@ -1249,6 +1249,14 @@ export const TOOL_SCHEMAS: Tool[] = [
           type: 'string',
           description: 'Optional prompt text when accepting a prompt',
         },
+        tabId: {
+          type: 'number',
+          description: 'Target tab ID. If omitted, uses the current active tab.',
+        },
+        windowId: {
+          type: 'number',
+          description: 'Window ID to select active tab from (when tabId is omitted).',
+        },
       },
       required: ['action'],
     },

@@ -500,9 +500,9 @@ class ComputerTool extends BaseBrowserToolExecutor {
         );
 
         if (params.ref) {
-          // Prefer DOM click via ref
           const domResult = await clickTool.execute({
             ref: params.ref,
+            tabId: tab.id,
             waitForNavigation: false,
             timeout: TIMEOUTS.DEFAULT_WAIT * 5,
             button: params.action === 'right_click' ? 'right' : 'left',
@@ -511,11 +511,11 @@ class ComputerTool extends BaseBrowserToolExecutor {
           return domResult;
         }
         if (params.selector) {
-          // Support selector-based click
           const domResult = await clickTool.execute({
             selector: params.selector,
             selectorType: params.selectorType,
             frameId: params.frameId,
+            tabId: tab.id,
             waitForNavigation: false,
             timeout: TIMEOUTS.DEFAULT_WAIT * 5,
             button: params.action === 'right_click' ? 'right' : 'left',
@@ -1012,12 +1012,13 @@ class ComputerTool extends BaseBrowserToolExecutor {
         if (!params.ref && !params.selector) {
           return createErrorResponse('Provide ref or selector and a value for fill');
         }
-        // Reuse existing fill tool to leverage robust DOM event behavior
         const res = await fillTool.execute({
           selector: params.selector as any,
           selectorType: params.selectorType as any,
           ref: params.ref as any,
           value: params.value as any,
+          tabId: tab.id,
+          windowId: tab.windowId,
         } as any);
         return res;
       }
@@ -1039,6 +1040,8 @@ class ComputerTool extends BaseBrowserToolExecutor {
             const r = await fillTool.execute({
               ref: item.ref as any,
               value: item.value as any,
+              tabId: tab.id,
+              windowId: tab.windowId,
             } as any);
             const ok = !r.isError;
             results.push({ ref: item.ref, ok, error: ok ? undefined : 'failed' });
@@ -1082,6 +1085,7 @@ class ComputerTool extends BaseBrowserToolExecutor {
           if (params.ref) {
             await clickTool.execute({
               ref: params.ref,
+              tabId: tab.id,
               waitForNavigation: false,
               timeout: TIMEOUTS.DEFAULT_WAIT * 5,
             });
@@ -1109,7 +1113,7 @@ class ComputerTool extends BaseBrowserToolExecutor {
           const keysStr = tokens.join(',');
           const repeatedKeys =
             repeat === 1 ? keysStr : Array.from({ length: repeat }, () => keysStr).join(',');
-          const res = await keyboardTool.execute({ keys: repeatedKeys });
+          const res = await keyboardTool.execute({ keys: repeatedKeys, tabId: tab.id });
           return res;
         }
       }

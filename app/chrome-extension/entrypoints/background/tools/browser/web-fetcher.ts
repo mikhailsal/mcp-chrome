@@ -84,10 +84,11 @@ class WebFetcherTool extends BaseBrowserToolExecutor {
         return createErrorResponse('Tab has no ID');
       }
 
-      // Optionally bring tab/window to foreground
+      // Activate the tab within its window, but do NOT bring the window to OS foreground.
+      // This matches chrome_navigate's default behavior: non-disruptive when the browser
+      // is behind other apps (e.g. the IDE).
       if (!background) {
         await chrome.tabs.update(tab.id, { active: true });
-        await chrome.windows.update(tab.windowId, { focused: true });
       }
 
       // Prepare result object
