@@ -15,6 +15,8 @@ interface NetworkRequestToolParams {
   // Shape: { fields?: Record<string, string|number|boolean>, files?: Array<{ name: string, fileUrl?: string, filePath?: string, base64Data?: string, filename?: string, contentType?: string }> }
   // Or a compact array: [ [name, fileSpec, filename?], ... ] where fileSpec can be 'url:...', 'file:/abs/path', 'base64:...'
   formData?: any;
+  tabId?: number; // Specific tab whose context (cookies, session) to use
+  windowId?: number; // Window to pick active tab from when tabId is not provided
 }
 
 /**
@@ -41,20 +43,27 @@ class NetworkRequestTool extends BaseBrowserToolExecutor {
     }
 
     try {
-      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tabs[0]?.id) {
-        return createErrorResponse('No active tab found or tab has no ID.');
+      let targetTabId: number;
+
+      if (typeof args.tabId === 'number') {
+        const tab = await this.tryGetTab(args.tabId);
+        if (!tab || !tab.id) {
+          return createErrorResponse(`Tab with ID ${args.tabId} not found.`);
+        }
+        targetTabId = tab.id;
+      } else {
+        const tab = await this.getActiveTabOrThrowInWindow(args.windowId);
+        targetTabId = tab.id!;
       }
-      const activeTabId = tabs[0].id;
 
       // Ensure content script is available in the target tab
-      await this.injectContentScript(activeTabId, ['inject-scripts/network-helper.js']);
+      await this.injectContentScript(targetTabId, ['inject-scripts/network-helper.js']);
 
       console.log(
         `NetworkRequestTool: Sending to content script: URL=${url}, Method=${method}, Headers=${Object.keys(headers).join(',')}, BodyType=${typeof body}`,
       );
 
-      const resultFromContentScript = await this.sendMessageToTab(activeTabId, {
+      const resultFromContentScript = await this.sendMessageToTab(targetTabId, {
         action: TOOL_MESSAGE_TYPES.NETWORK_SEND_REQUEST,
         url: url,
         method: method,

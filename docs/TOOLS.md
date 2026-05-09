@@ -72,15 +72,14 @@ Close specific tabs or windows.
 
 **Parameters**:
 
-- `tabIds` (array, optional): Array of tab IDs to close
-- `windowIds` (array, optional): Array of window IDs to close
+- `tabIds` (array, optional): Array of tab IDs to close. If not provided, closes the active tab.
+- `url` (string, optional): Close tabs matching this URL. Can be used instead of tabIds.
 
 **Example**:
 
 ```json
 {
-  "tabIds": [123, 456],
-  "windowIds": [789]
+  "tabIds": [123, 456]
 }
 ```
 
@@ -102,20 +101,18 @@ Switch to a specific browser tab.
 }
 ```
 
-### `chrome_go_back_or_forward`
+### Browser History Navigation
 
-Navigate browser history.
+To navigate back or forward in browser history, use `chrome_navigate` with special URL values:
 
-**Parameters**:
-
-- `direction` (string, required): "back" or "forward"
-- `tabId` (number, optional): Specific tab ID (default: active tab)
+- `url: "back"` — Navigate back in history
+- `url: "forward"` — Navigate forward in history
 
 **Example**:
 
 ```json
 {
-  "direction": "back",
+  "url": "back",
   "tabId": 123
 }
 ```

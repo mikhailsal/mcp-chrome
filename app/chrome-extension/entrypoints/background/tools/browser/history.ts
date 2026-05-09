@@ -28,6 +28,7 @@ interface HistoryItem {
   url?: string;
   title?: string;
   lastVisitTime?: number; // Timestamp in milliseconds
+  lastVisitTimeIso?: string; // ISO 8601 formatted timestamp
   visitCount?: number;
   typedCount?: number;
 }
@@ -199,6 +200,9 @@ class HistoryTool extends BaseBrowserToolExecutor {
           url: item.url,
           title: item.title,
           lastVisitTime: item.lastVisitTime,
+          lastVisitTimeIso: item.lastVisitTime
+            ? new Date(item.lastVisitTime).toISOString()
+            : undefined,
           visitCount: item.visitCount,
           typedCount: item.typedCount,
         })),

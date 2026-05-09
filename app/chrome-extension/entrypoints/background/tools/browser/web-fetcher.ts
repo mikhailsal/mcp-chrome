@@ -11,6 +11,8 @@ interface WebFetcherToolParams {
   tabId?: number; // target existing tab id
   background?: boolean; // do not activate/focus
   windowId?: number; // target window id to pick active tab or create tab
+  waitTimeout?: number; // max ms to wait for page load when creating a new tab (default: 15000)
+  closeAfterFetch?: boolean; // close the tab after fetching content when a new tab was created (default: false)
 }
 
 class WebFetcherTool extends BaseBrowserToolExecutor {
@@ -19,6 +21,25 @@ class WebFetcherTool extends BaseBrowserToolExecutor {
   /**
    * Execute web fetcher operation
    */
+  private waitForTabLoad(tabId: number, timeoutMs: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve(); // resolve on timeout rather than reject — best-effort fetch
+      }, timeoutMs);
+
+      const listener = (updatedTabId: number, changeInfo: chrome.tabs.TabChangeInfo) => {
+        if (updatedTabId === tabId && changeInfo.status === 'complete') {
+          clearTimeout(timer);
+          chrome.tabs.onUpdated.removeListener(listener);
+          resolve();
+        }
+      };
+
+      chrome.tabs.onUpdated.addListener(listener);
+    });
+  }
+
   async execute(args: WebFetcherToolParams): Promise<ToolResult> {
     // Handle mutually exclusive parameters: if htmlContent is true, textContent is forced to false
     const htmlContent = args.htmlContent === true;
@@ -28,6 +49,8 @@ class WebFetcherTool extends BaseBrowserToolExecutor {
     const explicitTabId = args.tabId;
     const background = args.background === true;
     const windowId = args.windowId;
+    const waitTimeout = args.waitTimeout ?? 15000;
+    const closeAfterFetch = args.closeAfterFetch === true;
 
     console.log(`Starting web fetcher with options:`, {
       htmlContent,
@@ -39,6 +62,7 @@ class WebFetcherTool extends BaseBrowserToolExecutor {
     try {
       // Get tab to fetch content from
       let tab;
+      let createdNewTab = false;
 
       if (typeof explicitTabId === 'number') {
         tab = await chrome.tabs.get(explicitTabId);
@@ -63,10 +87,13 @@ class WebFetcherTool extends BaseBrowserToolExecutor {
           // Create new tab with the URL
           console.log(`No existing tab found with URL: ${url}, creating new tab`);
           tab = await chrome.tabs.create({ url, active: background ? false : true });
+          createdNewTab = true;
 
-          // Wait for page to load
-          console.log('Waiting for page to load...');
-          await new Promise((resolve) => setTimeout(resolve, 3000));
+          // Wait for actual page load completion instead of an arbitrary delay
+          console.log(`Waiting for page to load (timeout: ${waitTimeout}ms)...`);
+          await this.waitForTabLoad(tab.id!, waitTimeout);
+          // Refresh tab info after load
+          tab = await chrome.tabs.get(tab.id!);
         }
       } else {
         // Use active tab (prefer specified window)
@@ -146,7 +173,15 @@ class WebFetcherTool extends BaseBrowserToolExecutor {
         }
       }
 
-      // Interactive elements feature has been removed
+      // Clean up the created tab if requested
+      if (createdNewTab && closeAfterFetch && tab.id) {
+        try {
+          await chrome.tabs.remove(tab.id);
+          result.tabClosed = true;
+        } catch (e) {
+          console.warn('Failed to close tab after fetch:', e);
+        }
+      }
 
       return {
         content: [

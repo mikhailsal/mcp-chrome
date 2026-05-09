@@ -9,12 +9,12 @@
 
 ## Summary
 
-| Severity  | Count (open) | Fixed |
-| --------- | ------------ | ----- |
-| High      | 0            | 1     |
-| Medium    | 0            | 5     |
-| Low       | 5            | 0     |
-| **Total** | **5**        | **6** |
+| Severity  | Count (open) | Fixed  |
+| --------- | ------------ | ------ |
+| High      | 0            | 1      |
+| Medium    | 0            | 5      |
+| Low       | 0            | 5      |
+| **Total** | **0**        | **11** |
 
 ---
 
@@ -38,7 +38,7 @@
 
 ---
 
-### BUG-54 · `chrome_history` returns raw `lastVisitTime` without human-readable format · Low
+### BUG-54 · `chrome_history` returns raw `lastVisitTime` without human-readable format · Low · FIXED
 
 **Tool:** `chrome_history`  
 **Description:** Each history item includes `lastVisitTime` as a raw Unix millisecond timestamp (e.g., `1778335192080.085`) but does not include a human-readable ISO 8601 equivalent. The `timeRange` object in the response already provides formatted times via `startTimeFormatted` / `endTimeFormatted`, and the bookmark tools (after BUG-42 fix in Report 01) include `dateAddedIso`. The history tool is inconsistent with both its own time range formatting and the bookmark tools.  
@@ -50,7 +50,9 @@
 
 **Expected:** Each item includes `lastVisitTimeIso` (e.g., `"2026-05-09T14:00:00.000Z"`) alongside the raw timestamp.  
 **Actual:** Only raw `lastVisitTime: 1778335192080.085` is present.  
-**Suggested fix:** Add `lastVisitTimeIso: new Date(item.lastVisitTime).toISOString()` to the response mapping at line 197 of `history.ts`, matching the pattern used in bookmark tools.
+**Fix applied:** Added `lastVisitTimeIso: item.lastVisitTime ? new Date(item.lastVisitTime).toISOString() : undefined` to the response mapping in `history.ts` and updated the `HistoryItem` interface.
+
+> **Revalidation (2026-05-09):** REPRODUCED → FIXED. Before fix: `chrome_history({ text: "httpbin", maxResults: 3 })` returned only raw `lastVisitTime: 1778335192080.085`. After fix: each item includes `lastVisitTimeIso: "2026-05-09T13:59:52.080Z"` alongside the raw timestamp, consistent with bookmark tools and timeRange formatting.
 
 ---
 
@@ -93,7 +95,7 @@ By contrast, `chrome_navigate` only focuses the window when `focusWindow=true` i
 
 ---
 
-### BUG-57 · `chrome_get_web_content` creates tab when URL provided but waits only 3s (hardcoded) · Low
+### BUG-57 · `chrome_get_web_content` creates tab when URL provided but waits only 3s (hardcoded) · Low · FIXED
 
 **Tool:** `chrome_get_web_content`  
 **Description:** When a `url` parameter is provided and no matching tab exists, the tool creates a new tab and waits for exactly 3000ms (line 69 of `web-fetcher.ts`) before fetching content. This is:
@@ -110,7 +112,9 @@ By contrast, `chrome_navigate` only focuses the window when `focusWindow=true` i
 
 **Expected:** The tool waits for the page to finish loading, then fetches content. The tab behavior (stay open / close) is documented.  
 **Actual:** Always waits exactly 3 seconds regardless of actual load state. Tab remains open permanently.  
-**Suggested fix:** Use `chrome.tabs.onUpdated` listener or `webNavigation.onCompleted` to wait for actual page load, with a configurable timeout. Consider adding a `closeAfterFetch` option.
+**Fix applied:** Replaced the hardcoded `setTimeout(3000)` with a `waitForTabLoad()` method that listens for `chrome.tabs.onUpdated` with `status === 'complete'`, with a configurable `waitTimeout` parameter (default: 15000ms). Added `closeAfterFetch` parameter to clean up created tabs. Updated TOOL_SCHEMAS with both new parameters.
+
+> **Revalidation (2026-05-09):** REPRODUCED → FIXED. Before fix: `chrome_get_web_content({ url: "https://httpbin.org/delay/2" })` waited exactly 3s regardless of load state, returned empty `title`/`url` fields, and left the tab open. After fix: tool waits for actual page load event, returns populated `title: "httpbin.org/delay/2"` and `url`, and with `closeAfterFetch: true` returns `tabClosed: true` confirming cleanup.
 
 ---
 
@@ -137,36 +141,42 @@ When tab `187478405` is **not** the active tab, `fillTool` will target the wrong
 
 ---
 
-### BUG-59 · `chrome_network_request` has no `tabId` parameter — always uses active tab context · Low
+### BUG-59 · `chrome_network_request` has no `tabId` parameter — always uses active tab context · Low · FIXED
 
 **Tool:** `chrome_network_request`  
 **Description:** The network request tool always injects its content script and sends the request from the active tab (`chrome.tabs.query({ active: true, currentWindow: true })` on line 44 of `network-request.ts`). Neither the schema nor the implementation accepts a `tabId` or `windowId` parameter. Since the request inherits cookies and browser context from the tab it runs in, the user cannot control which tab's session/cookies are used. If the active tab changes between the user's intent and the tool call, the request may use the wrong context.
 
 **Expected:** `tabId` parameter accepted, consistent with other tools, allowing the user to specify which tab's context to use for the request.  
 **Actual:** Always uses active tab's context.  
-**Suggested fix:** Add `tabId`/`windowId` parameters to the schema and implementation.
+**Fix applied:** Added `tabId` and `windowId` parameters to both TOOL_SCHEMAS in `tools.ts` and the `NetworkRequestToolParams` interface + implementation in `network-request.ts`. Uses `tryGetTab(tabId)` / `getActiveTabOrThrowInWindow(windowId)` from the base class, matching the pattern established by other tools.
+
+> **Revalidation (2026-05-09):** REPRODUCED → FIXED. Before fix: request always used active tab context (Referer header showed active tab URL). After fix: `chrome_network_request({ url: "https://httpbin.org/get", tabId: 187478405 })` correctly executed from tab 187478405 (httpbin.org/forms/post) while active tab was 187478411 (httpbin.org/get). Response Referer header confirmed: `"Referer": "https://httpbin.org/forms/post"`.
 
 ---
 
-### BUG-60 · Documentation lists `chrome_go_back_or_forward` as a separate tool, but it doesn't exist · Low
+### BUG-60 · Documentation lists `chrome_go_back_or_forward` as a separate tool, but it doesn't exist · Low · FIXED
 
 **Tool:** (documentation)  
 **Description:** The README.md (line 157) lists `chrome_go_back_or_forward` as a separate tool under Browser Management. The TOOLS.md (lines 109–121) documents it with its own parameters section. However, this tool does not exist in `TOOL_SCHEMAS`, `TOOL_NAMES`, or any tool executor class. The functionality is implemented within `chrome_navigate` by passing `url: "back"` or `url: "forward"`. The documentation is misleading — AI agents and users will try to call `chrome_go_back_or_forward` and get a "tool not found" error.
 
 **Expected:** Documentation reflects the actual tool surface (mention `chrome_navigate` with `url: "back"/"forward"` instead).  
 **Actual:** Phantom tool listed in docs that doesn't exist.  
-**Suggested fix:** Remove the standalone `chrome_go_back_or_forward` entry from both README.md and TOOLS.md. Instead, document the `url: "back"` / `url: "forward"` behavior under `chrome_navigate`.
+**Fix applied:** Removed the standalone `chrome_go_back_or_forward` entry from README.md and replaced it with a note on `chrome_navigate` about back/forward support. In TOOLS.md, replaced the phantom tool section with a "Browser History Navigation" subsection that documents `chrome_navigate` with `url: "back"` / `url: "forward"`.
+
+> **Revalidation (2026-05-09):** REPRODUCED → FIXED. Documentation issue confirmed by schema inspection — no `chrome_go_back_or_forward` in TOOL_SCHEMAS or TOOL_NAMES. Documentation now correctly refers to `chrome_navigate` with `url: "back"/"forward"`.
 
 ---
 
-### BUG-61 · Documentation lists `windowIds` parameter for `chrome_close_tabs`, but schema doesn't have it · Low
+### BUG-61 · Documentation lists `windowIds` parameter for `chrome_close_tabs`, but schema doesn't have it · Low · FIXED
 
 **Tool:** `chrome_close_tabs` (documentation)  
 **Description:** TOOLS.md (line 76) documents a `windowIds` parameter for `chrome_close_tabs`: "Array of window IDs to close". However, the actual `TOOL_SCHEMAS` in `tools.ts` only defines `tabIds` and `url` properties — there is no `windowIds` property. The `CloseTabsTool` implementation in `common.ts` also has no code to handle `windowIds`.
 
 **Expected:** Documentation matches schema — either add `windowIds` support or remove it from docs.  
 **Actual:** Documented parameter that doesn't exist in schema or implementation.  
-**Suggested fix:** Either implement `windowIds` support or remove it from the documentation.
+**Fix applied:** Removed the phantom `windowIds` parameter from TOOLS.md and updated the documentation to accurately reflect the schema: `tabIds` (array, optional) and `url` (string, optional).
+
+> **Revalidation (2026-05-09):** REPRODUCED → FIXED. Documentation issue confirmed by schema inspection — `TOOL_SCHEMAS` for `chrome_close_tabs` only has `tabIds` and `url` properties, no `windowIds`. TOOLS.md now accurately documents only the parameters that exist in the schema.
 
 ---
 

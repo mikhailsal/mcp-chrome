@@ -601,6 +601,16 @@ export const TOOL_SCHEMAS: Tool[] = [
           description:
             'CSS selector to get content from a specific element. If provided, only content from this element will be returned',
         },
+        waitTimeout: {
+          type: 'number',
+          description:
+            'Max milliseconds to wait for page load when a new tab is created for the given URL (default: 15000). The tool listens for the actual page load event rather than waiting a fixed time.',
+        },
+        closeAfterFetch: {
+          type: 'boolean',
+          description:
+            'Close the tab after fetching content, only applies when a new tab was created for the given URL (default: false)',
+        },
       },
       required: [],
     },
@@ -635,6 +645,15 @@ export const TOOL_SCHEMAS: Tool[] = [
           type: 'object',
           description:
             'Multipart/form-data descriptor. If provided, overrides body and builds FormData with optional file attachments. Shape: { fields?: Record<string,string|number|boolean>, files?: Array<{ name: string, fileUrl?: string, filePath?: string, base64Data?: string, filename?: string, contentType?: string }> }. Also supports a compact array form: [ [name, fileSpec, filename?], ... ] where fileSpec may be url:, file:, or base64:.',
+        },
+        tabId: {
+          type: 'number',
+          description:
+            'Tab ID whose context (cookies, session) to use for the request. If not provided, uses the active tab.',
+        },
+        windowId: {
+          type: 'number',
+          description: 'Window ID to pick the active tab from when tabId is not provided.',
         },
       },
       required: ['url'],
