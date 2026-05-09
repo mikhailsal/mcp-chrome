@@ -3,6 +3,8 @@ import { BaseBrowserToolExecutor } from '../base-browser';
 import { TOOL_NAMES } from 'chrome-mcp-shared';
 import {
   parseISO,
+  subMinutes,
+  subHours,
   subDays,
   subWeeks,
   subMonths,
@@ -69,17 +71,19 @@ class HistoryTool extends BaseBrowserToolExecutor {
     if (lowerDateStr === 'yesterday') return startOfYesterday().getTime();
 
     const relativeMatch = lowerDateStr.match(
-      /^(\d+)\s+(day|days|week|weeks|month|months|year|years)\s+ago$/,
+      /^(\d+)\s+(minute|minutes|hour|hours|day|days|week|weeks|month|months|year|years)\s+ago$/,
     );
     if (relativeMatch) {
       const amount = parseInt(relativeMatch[1], 10);
       const unit = relativeMatch[2];
       let resultDate: Date;
-      if (unit.startsWith('day')) resultDate = subDays(now, amount);
+      if (unit.startsWith('minute')) resultDate = subMinutes(now, amount);
+      else if (unit.startsWith('hour')) resultDate = subHours(now, amount);
+      else if (unit.startsWith('day')) resultDate = subDays(now, amount);
       else if (unit.startsWith('week')) resultDate = subWeeks(now, amount);
       else if (unit.startsWith('month')) resultDate = subMonths(now, amount);
       else if (unit.startsWith('year')) resultDate = subYears(now, amount);
-      else return null; // Should not happen with the regex
+      else return null;
       return resultDate.getTime();
     }
 
@@ -129,7 +133,7 @@ class HistoryTool extends BaseBrowserToolExecutor {
         const parsedStart = this.parseDateString(args.startTime);
         if (parsedStart === null) {
           return createErrorResponse(
-            `Invalid format for start time: "${args.startTime}". Supported formats: ISO (YYYY-MM-DD), "today", "yesterday", "X days/weeks/months/years ago".`,
+            `Invalid format for start time: "${args.startTime}". Supported formats: ISO (YYYY-MM-DD), "today", "yesterday", "X minutes/hours/days/weeks/months/years ago".`,
           );
         }
         startTimeMs = parsedStart;
@@ -143,7 +147,7 @@ class HistoryTool extends BaseBrowserToolExecutor {
         const parsedEnd = this.parseDateString(args.endTime);
         if (parsedEnd === null) {
           return createErrorResponse(
-            `Invalid format for end time: "${args.endTime}". Supported formats: ISO (YYYY-MM-DD), "today", "yesterday", "X days/weeks/months/years ago".`,
+            `Invalid format for end time: "${args.endTime}". Supported formats: ISO (YYYY-MM-DD), "today", "yesterday", "X minutes/hours/days/weeks/months/years ago".`,
           );
         }
         endTimeMs = parsedEnd;

@@ -41,6 +41,13 @@
 - BUG-49 is not reproducible as originally written on the current branch because real MCP history traversal currently fails earlier with `Cannot find a next page in history`, so the missing-`finalUrl` response shape could not be revalidated.
 - Regression coverage was added in `app/chrome-extension/tests/browser/navigate.tool.test.ts` and `app/chrome-extension/tests/browser/screenshot.tool.test.ts`.
 
+**Post-report addendum (2026-05-09, mixed-tool revalidation):**
+
+- BUG-28 is fixed: added `minute|minutes|hour|hours` support to the relative time parser in `chrome_history`.
+- BUG-02 is fixed: whitespace/empty URL validation added to `chrome_network_request` with protocol check.
+- BUG-36 is fixed: `refMapCount` now counts actual refs in `pageContent` instead of using the interactive-only refMap array length.
+- BUG-24 is not reproducible: timeout handling already returns structured user-friendly errors via the `TimeoutError` class.
+
 ---
 
 ## `chrome_gif_recorder` (7 bugs)
@@ -361,10 +368,12 @@ These are not page messages and pollute every result.
 
 ---
 
-### BUG-36 · `refMapCount` off by one · Low
+### BUG-36 · `refMapCount` off by one · Low — FIXED (2026-05-09)
 
 **Description:** `refMapCount` consistently reports one less than the actual number of refs in the response. E.g., `refMapCount=13` but refs `ref_1` through `ref_14` (=14 refs) are returned. Confirmed across multiple pages.  
 **Suggested fix:** Fix the count: `refMapCount = Object.keys(refMap).length` (post-insertion count, not pre-insertion).
+
+**Revalidation (2026-05-09):** Reproduced — `refMapCount` was 78 while `pageContent` contained 172 refs (ref_1 through ref_172). Root cause: `refMapCount` used `resp.refMap.length` which only counts interactive elements pushed into the refMap array, but `pageContent` assigns refs to ALL included elements. Fixed by counting actual `[ref=ref_N]` occurrences in the `pageContent` string instead of relying on the refMap array length.
 
 ---
 
@@ -399,7 +408,7 @@ The likely cause of the original report: `chrome_read_page` shows the button as 
 
 ## `chrome_network_request` (1 bug)
 
-### BUG-02 · Whitespace URL silently fetches wrong resource (Security) · Critical
+### BUG-02 · Whitespace URL silently fetches wrong resource (Security) · Critical — FIXED (2026-05-09)
 
 **Description:** Passing a whitespace-only URL (`"   "`) returns `success:true` with actual content fetched from the active tab's URL. No URL validation is performed; the empty/whitespace string is silently resolved to the current page URL. This can expose unintended page data or mislead the AI into using wrong content.  
 **Steps to reproduce:**
@@ -412,20 +421,24 @@ The likely cause of the original report: `chrome_read_page` shows the button as 
 **Actual:** `success:true` with content from the active tab's URL.  
 **Suggested fix:** Trim and validate the URL before processing. Reject blank/whitespace strings with a clear error.
 
+**Revalidation (2026-05-09):** Reproduced — whitespace URL `"   "` returned `success:true` with HTTP 200 content from the active tab. Fixed by trimming the URL before validation and adding a protocol check (`http://` or `https://` required). Whitespace-only or protocol-less URLs now return clear validation errors.
+
 ---
 
 ## `chrome_javascript` (1 bug)
 
-### BUG-24 · Timeout returns raw CDP error code · Medium
+### BUG-24 · Timeout returns raw CDP error code · Medium — NOT REPRODUCED (2026-05-09)
 
 **Description:** When a script times out, the error returned is `{"code":-32603,"message":"Internal error"}` — raw CDP JSON. The caller gets no indication the issue was a timeout.  
 **Suggested fix:** Catch the timeout condition and return a user-friendly `"Script timed out after Xms"` message.
+
+**Revalidation (2026-05-09):** Not reproduced on the current branch. Testing with `chrome_javascript` using `timeoutMs=2000` and a 20-second `setTimeout` returned a structured, user-friendly response: `{"success":false,"engine":"cdp","error":{"kind":"timeout","message":"Execution timed out after 3000ms"}}`. The `TimeoutError` class and proper error classification in `javascript.ts` already handle this case correctly.
 
 ---
 
 ## `chrome_history` (1 bug)
 
-### BUG-28 · Time format "1 hour ago" unsupported; misleading error message · Medium
+### BUG-28 · Time format "1 hour ago" unsupported; misleading error message · Medium — FIXED (2026-05-09)
 
 **Description:** The tool description implies flexible relative time queries. However, "1 hour ago" fails. Only `"X days/weeks/months/years ago"` works. The error message reveals the internal supported format list but omits hours entirely. This suggests hours were never implemented.  
 **Steps to reproduce:**
@@ -437,6 +450,8 @@ The likely cause of the original report: `chrome_read_page` shows the button as 
 **Expected:** Results from the last hour.  
 **Actual:** Error — `"Please use 'X days/weeks/months/years ago' format."`  
 **Suggested fix:** Add hour support to the time parser, or explicitly document the supported granularities.
+
+**Revalidation (2026-05-09):** Reproduced — the regex in `parseDateString` only matched `day|days|week|weeks|month|months|year|years`. Fixed by adding `minute|minutes|hour|hours` to the relative time pattern and corresponding `subMinutes`/`subHours` handlers. Schema descriptions were also updated to document the newly supported granularities.
 
 ---
 

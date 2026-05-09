@@ -24,18 +24,20 @@ class NetworkRequestTool extends BaseBrowserToolExecutor {
   name = TOOL_NAMES.BROWSER.NETWORK_REQUEST;
 
   async execute(args: NetworkRequestToolParams): Promise<ToolResult> {
-    const {
-      url,
-      method = 'GET',
-      headers = {},
-      body,
-      timeout = DEFAULT_NETWORK_REQUEST_TIMEOUT,
-    } = args;
+    const { method = 'GET', headers = {}, body, timeout = DEFAULT_NETWORK_REQUEST_TIMEOUT } = args;
+
+    const url = typeof args.url === 'string' ? args.url.trim() : '';
 
     console.log(`NetworkRequestTool: Executing with options:`, args);
 
     if (!url) {
-      return createErrorResponse('URL parameter is required.');
+      return createErrorResponse('URL parameter is required and cannot be empty or whitespace.');
+    }
+
+    if (!/^https?:\/\//i.test(url) && !/^data:/i.test(url)) {
+      return createErrorResponse(
+        `Invalid URL: "${args.url}". URL must start with http:// or https://.`,
+      );
     }
 
     try {

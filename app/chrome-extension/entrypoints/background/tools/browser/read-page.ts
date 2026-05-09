@@ -95,7 +95,8 @@ class ReadPageTool extends BaseBrowserToolExecutor {
       const lines = pageContent
         ? pageContent.split('\n').filter((l: string) => l.trim().length > 0).length
         : 0;
-      const refCount = Array.isArray(resp?.refMap) ? resp.refMap.length : 0;
+      const refMatches = pageContent ? pageContent.match(/\[ref=ref_\d+\]/g) : null;
+      const refCount = refMatches ? refMatches.length : 0;
 
       // Skip sparse heuristics when user explicitly controls output
       const isSparse = !userControlled && lines < 10 && refCount < 3;

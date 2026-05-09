@@ -678,12 +678,12 @@ export const TOOL_SCHEMAS: Tool[] = [
         startTime: {
           type: 'string',
           description:
-            'Start time as a date string. Supports ISO format (e.g., "2023-10-01", "2023-10-01T14:30:00"), relative times (e.g., "1 day ago", "2 weeks ago", "3 months ago", "1 year ago"), and special keywords ("now", "today", "yesterday"). Default: 24 hours ago',
+            'Start time as a date string. Supports ISO format (e.g., "2023-10-01", "2023-10-01T14:30:00"), relative times (e.g., "30 minutes ago", "1 hour ago", "2 days ago", "3 weeks ago", "1 month ago", "1 year ago"), and special keywords ("now", "today", "yesterday"). Default: 24 hours ago',
         },
         endTime: {
           type: 'string',
           description:
-            'End time as a date string. Supports ISO format (e.g., "2023-10-31", "2023-10-31T14:30:00"), relative times (e.g., "1 day ago", "2 weeks ago", "3 months ago", "1 year ago"), and special keywords ("now", "today", "yesterday"). Default: current time',
+            'End time as a date string. Supports ISO format (e.g., "2023-10-31", "2023-10-31T14:30:00"), relative times (e.g., "30 minutes ago", "1 hour ago", "2 days ago", "3 weeks ago", "1 month ago", "1 year ago"), and special keywords ("now", "today", "yesterday"). Default: current time',
         },
         maxResults: {
           type: 'number',
