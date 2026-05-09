@@ -97,10 +97,18 @@ export const TOOL_SCHEMAS: Tool[] = [
   {
     name: TOOL_NAMES.BROWSER.PERFORMANCE_START_TRACE,
     description:
-      'Starts a performance trace recording on the selected page. Optionally reloads the page and/or auto-stops after a short duration.',
+      'Starts a performance trace recording on the selected page. Optionally reloads the page and/or auto-stops after a short duration. When autoStop is true, the tool waits for the specified duration, stops the trace, and returns the full result (no separate stop call needed).',
     inputSchema: {
       type: 'object',
       properties: {
+        tabId: {
+          type: 'number',
+          description: 'Target tab ID to trace (default: active tab).',
+        },
+        windowId: {
+          type: 'number',
+          description: 'Target window ID to pick active tab when tabId is omitted.',
+        },
         reload: {
           type: 'boolean',
           description:
@@ -108,11 +116,13 @@ export const TOOL_SCHEMAS: Tool[] = [
         },
         autoStop: {
           type: 'boolean',
-          description: 'Determines if the trace should be automatically stopped (default false).',
+          description:
+            'Determines if the trace should be automatically stopped (default false). When true, the tool waits for durationMs and returns the complete trace result inline — no separate stop call is needed.',
         },
         durationMs: {
           type: 'number',
-          description: 'Auto-stop duration in milliseconds when autoStop is true (default 5000).',
+          description:
+            'Auto-stop duration in milliseconds when autoStop is true (default 5000, min 1000, max 60000).',
         },
       },
       required: [],
@@ -124,6 +134,15 @@ export const TOOL_SCHEMAS: Tool[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        tabId: {
+          type: 'number',
+          description:
+            'Target tab ID (default: active tab). Must match the tab that started the trace.',
+        },
+        windowId: {
+          type: 'number',
+          description: 'Target window ID to pick active tab when tabId is omitted.',
+        },
         saveToDownloads: {
           type: 'boolean',
           description: 'Whether to save the trace as a JSON file in Downloads (default true).',
@@ -143,6 +162,14 @@ export const TOOL_SCHEMAS: Tool[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        tabId: {
+          type: 'number',
+          description: 'Target tab ID whose trace to analyze (default: active tab).',
+        },
+        windowId: {
+          type: 'number',
+          description: 'Target window ID to pick active tab when tabId is omitted.',
+        },
         insightName: {
           type: 'string',
           description:
