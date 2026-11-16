@@ -3,12 +3,23 @@ import { BaseBrowserToolExecutor } from '../base-browser';
 import { TOOL_NAMES } from 'chrome-mcp-shared';
 import { cdpSessionManager } from '@/utils/cdp-session-manager';
 import { NETWORK_FILTERS } from '@/common/constants';
+import { ChildTargetTracker } from './network-capture-child-targets';
 
 interface NetworkDebuggerStartToolParams {
   url?: string; // URL to navigate to or focus. If not provided, uses active tab.
   maxCaptureTime?: number;
   inactivityTimeout?: number; // Inactivity timeout (milliseconds)
   includeStatic?: boolean; // if include static resources
+  maxRequests?: number; // Max requests to store for this capture
+  urlFilter?: string; // Only store requests whose URL contains this substring
+}
+
+interface CaptureOptions {
+  maxCaptureTime: number;
+  inactivityTimeout: number;
+  includeStatic: boolean;
+  maxRequests: number;
+  urlFilter: string;
 }
 
 // Network request object interface
@@ -40,6 +51,23 @@ const DEBUGGER_PROTOCOL_VERSION = '1.3';
 const MAX_RESPONSE_BODY_SIZE_BYTES = 1 * 1024 * 1024; // 1MB
 const DEFAULT_MAX_CAPTURE_TIME_MS = 3 * 60 * 1000; // 3 minutes
 const DEFAULT_INACTIVITY_TIMEOUT_MS = 60 * 1000; // 1 minute
+const DEFAULT_MAX_REQUESTS = 100; // Max requests to store to prevent memory issues
+const MAX_REQUESTS_UPPER_BOUND = 2000;
+
+/**
+ * Request ids are only unique within one debugger session, so requests of child
+ * sessions (cross-origin iframes) are stored under a session-qualified key.
+ */
+function requestKey(sessionId: string | undefined, requestId: string): string {
+  return sessionId ? `${sessionId}:${requestId}` : requestId;
+}
+
+function normalizeMaxRequests(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 1) {
+    return DEFAULT_MAX_REQUESTS;
+  }
+  return Math.min(Math.floor(value), MAX_REQUESTS_UPPER_BOUND);
+}
 
 /**
  * Network capture start tool - uses Chrome Debugger API to start capturing network requests
@@ -52,7 +80,7 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
   private lastActivityTime: Map<number, number> = new Map(); // tabId -> timestamp of last network activity
   private pendingResponseBodies: Map<string, Promise<any>> = new Map(); // requestId -> promise for getResponseBody
   private requestCounters: Map<number, number> = new Map(); // tabId -> count of captured requests (after filtering)
-  private static MAX_REQUESTS_PER_CAPTURE = 100; // Max requests to store to prevent memory issues
+  private childTargets = new ChildTargetTracker(); // cross-origin iframe sessions per tab
   public static instance: NetworkDebuggerStartTool | null = null;
 
   constructor() {
@@ -111,6 +139,8 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
         maxCaptureTime: openerCaptureInfo.maxCaptureTime,
         inactivityTimeout: openerCaptureInfo.inactivityTimeout,
         includeStatic: openerCaptureInfo.includeStatic,
+        maxRequests: openerCaptureInfo.maxRequests,
+        urlFilter: openerCaptureInfo.urlFilter,
       });
 
       console.log(`NetworkDebuggerStartTool: Successfully extended capture to new tab ${newTabId}`);
@@ -124,15 +154,8 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
    * @param tabId Tab ID
    * @param options Capture options
    */
-  private async startCaptureForTab(
-    tabId: number,
-    options: {
-      maxCaptureTime: number;
-      inactivityTimeout: number;
-      includeStatic: boolean;
-    },
-  ): Promise<void> {
-    const { maxCaptureTime, inactivityTimeout, includeStatic } = options;
+  private async startCaptureForTab(tabId: number, options: CaptureOptions): Promise<void> {
+    const { maxCaptureTime, inactivityTimeout, includeStatic, maxRequests, urlFilter } = options;
 
     // If already capturing, stop first
     if (this.captureData.has(tabId)) {
@@ -167,6 +190,8 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
         maxCaptureTime,
         inactivityTimeout,
         includeStatic,
+        maxRequests,
+        urlFilter,
         requests: {},
         limitReached: false,
       });
@@ -177,8 +202,20 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
       // Update last activity time
       this.updateLastActivityTime(tabId);
 
+      // Cross-origin iframes are separate debugger targets. Attach to them after the
+      // capture state exists, because Chrome reports already loaded frames immediately.
+      try {
+        await this.childTargets.start(tabId);
+      } catch (error) {
+        console.warn(
+          `NetworkDebuggerStartTool: Could not enable iframe capture for tab ${tabId}; capturing the top frame only:`,
+          error,
+        );
+        this.childTargets.forget(tabId);
+      }
+
       console.log(
-        `NetworkDebuggerStartTool: Started capture for tab ${tabId} (${tab.url}). Max requests: ${NetworkDebuggerStartTool.MAX_REQUESTS_PER_CAPTURE}, Max time: ${maxCaptureTime}ms, Inactivity: ${inactivityTimeout}ms.`,
+        `NetworkDebuggerStartTool: Started capture for tab ${tabId} (${tab.url}). Max requests: ${maxRequests}, Max time: ${maxCaptureTime}ms, Inactivity: ${inactivityTimeout}ms.`,
       );
 
       // Set maximum capture time
@@ -208,34 +245,49 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
     }
   }
 
-  private handleDebuggerEvent(source: chrome.debugger.Debuggee, method: string, params?: any) {
+  private handleDebuggerEvent(
+    source: chrome.debugger.DebuggerSession,
+    method: string,
+    params?: any,
+  ) {
     if (!source.tabId) return;
 
     const tabId = source.tabId;
+    const sessionId = source.sessionId; // Set for events of child sessions (iframes)
     const captureInfo = this.captureData.get(tabId);
 
     if (!captureInfo) return; // Not capturing for this tab
+
+    if (method.startsWith('Target.')) {
+      if (this.childTargets.isTracking(tabId)) {
+        void this.childTargets.handleEvent(tabId, sessionId, method, params);
+      }
+      return;
+    }
 
     // Update last activity time for any relevant network event
     this.updateLastActivityTime(tabId);
 
     switch (method) {
       case 'Network.requestWillBeSent':
-        this.handleRequestWillBeSent(tabId, params);
+        this.handleRequestWillBeSent(tabId, params, sessionId);
         break;
       case 'Network.responseReceived':
-        this.handleResponseReceived(tabId, params);
+        this.handleResponseReceived(tabId, params, sessionId);
         break;
       case 'Network.loadingFinished':
-        this.handleLoadingFinished(tabId, params);
+        this.handleLoadingFinished(tabId, params, sessionId);
         break;
       case 'Network.loadingFailed':
-        this.handleLoadingFailed(tabId, params);
+        this.handleLoadingFailed(tabId, params, sessionId);
         break;
     }
   }
 
-  private handleDebuggerDetach(source: chrome.debugger.Debuggee, reason: string) {
+  private handleDebuggerDetach(source: chrome.debugger.DebuggerSession, reason: string) {
+    // A child session going away does not end the capture of the tab.
+    if (source.sessionId) return;
+
     if (source.tabId && this.captureData.has(source.tabId)) {
       console.log(
         `NetworkDebuggerStartTool: Debugger detached from tab ${source.tabId}, reason: ${reason}. Cleaning up.`,
@@ -333,11 +385,17 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
     return false;
   }
 
-  private handleRequestWillBeSent(tabId: number, params: any) {
+  private handleRequestWillBeSent(tabId: number, params: any, sessionId?: string) {
     const captureInfo = this.captureData.get(tabId);
     if (!captureInfo) return;
 
     const { requestId, request, timestamp, type, loaderId, frameId } = params;
+    const key = requestKey(sessionId, requestId);
+
+    // Caller-supplied filter: keep only matching requests so they do not use up the limit
+    if (captureInfo.urlFilter && !String(request.url || '').includes(captureInfo.urlFilter)) {
+      return;
+    }
 
     // Initial filtering by URL (ads, analytics) and extension (if !includeStatic)
     if (
@@ -348,18 +406,18 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
     }
 
     const currentCount = this.requestCounters.get(tabId) || 0;
-    if (currentCount >= NetworkDebuggerStartTool.MAX_REQUESTS_PER_CAPTURE) {
-      // console.log(`NetworkDebuggerStartTool: Request limit (${NetworkDebuggerStartTool.MAX_REQUESTS_PER_CAPTURE}) reached for tab ${tabId}. Ignoring: ${request.url}`);
+    if (currentCount >= captureInfo.maxRequests && !captureInfo.requests[key]) {
       captureInfo.limitReached = true; // Mark that limit was hit
       return;
     }
 
     // Store initial request info
     // Ensure we don't overwrite if a redirect (same requestId) occurred, though usually loaderId changes
-    if (!captureInfo.requests[requestId]) {
+    if (!captureInfo.requests[key]) {
       // Or check based on loaderId as well if needed
-      captureInfo.requests[requestId] = {
+      captureInfo.requests[key] = {
         requestId,
+        sessionId, // Child session that owns the request; needed to fetch its body
         url: request.url,
         method: request.method,
         requestHeaders: request.headers, // Temporary, will be processed
@@ -371,14 +429,14 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
       };
 
       if (request.postData) {
-        captureInfo.requests[requestId].requestBody = request.postData;
+        captureInfo.requests[key].requestBody = request.postData;
       }
       // console.log(`NetworkDebuggerStartTool: Captured request for tab ${tabId}: ${request.method} ${request.url}`);
     } else {
       // This could be a redirect. Update URL and other relevant fields.
       // Chrome often issues a new `requestWillBeSent` for redirects with the same `requestId` but a new `loaderId`.
       // console.log(`NetworkDebuggerStartTool: Request ${requestId} updated (likely redirect) for tab ${tabId} to URL: ${request.url}`);
-      const existingRequest = captureInfo.requests[requestId];
+      const existingRequest = captureInfo.requests[key];
       existingRequest.url = request.url; // Update URL due to redirect
       existingRequest.requestTime = timestamp * 1000; // Update time for the redirected request
       if (request.headers) existingRequest.requestHeaders = request.headers;
@@ -387,12 +445,13 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
     }
   }
 
-  private handleResponseReceived(tabId: number, params: any) {
+  private handleResponseReceived(tabId: number, params: any, sessionId?: string) {
     const captureInfo = this.captureData.get(tabId);
     if (!captureInfo) return;
 
     const { requestId, response, timestamp, type } = params; // type here is resource type
-    const requestInfo: NetworkRequestInfo = captureInfo.requests[requestId];
+    const key = requestKey(sessionId, requestId);
+    const requestInfo: NetworkRequestInfo = captureInfo.requests[key];
 
     if (!requestInfo) {
       // console.warn(`NetworkDebuggerStartTool: Received response for unknown requestId ${requestId} on tab ${tabId}`);
@@ -402,7 +461,7 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
     // Secondary filtering based on MIME type, now that we have it
     if (this.shouldFilterByMimeType(response.mimeType, captureInfo.includeStatic)) {
       // console.log(`NetworkDebuggerStartTool: Filtering request by MIME type (${response.mimeType}): ${requestInfo.url}`);
-      delete captureInfo.requests[requestId]; // Remove from captured data
+      delete captureInfo.requests[key]; // Remove from captured data
       // Note: We don't decrement requestCounter here as it's meant to track how many *potential* requests were processed up to MAX_REQUESTS.
       // Or, if MAX_REQUESTS is strictly for *stored* requests, then decrement. For now, let's assume it's for stored.
       // const currentCount = this.requestCounters.get(tabId) || 0;
@@ -425,12 +484,12 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
     // console.log(`NetworkDebuggerStartTool: Received response for ${requestId} on tab ${tabId}: ${response.status}`);
   }
 
-  private async handleLoadingFinished(tabId: number, params: any) {
+  private async handleLoadingFinished(tabId: number, params: any, sessionId?: string) {
     const captureInfo = this.captureData.get(tabId);
     if (!captureInfo) return;
 
     const { requestId, encodedDataLength } = params;
-    const requestInfo: NetworkRequestInfo = captureInfo.requests[requestId];
+    const requestInfo: NetworkRequestInfo = captureInfo.requests[requestKey(sessionId, requestId)];
 
     if (!requestInfo) {
       // console.warn(`NetworkDebuggerStartTool: LoadingFinished for unknown requestId ${requestId} on tab ${tabId}`);
@@ -445,7 +504,7 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
     if (this.shouldCaptureResponseBody(requestInfo)) {
       try {
         // console.log(`NetworkDebuggerStartTool: Attempting to get response body for ${requestId} (${requestInfo.url})`);
-        const responseBodyData = await this.getResponseBody(tabId, requestId);
+        const responseBodyData = await this.getResponseBody(tabId, requestId, sessionId);
         if (responseBodyData) {
           if (
             responseBodyData.body &&
@@ -501,12 +560,12 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
     return false;
   }
 
-  private handleLoadingFailed(tabId: number, params: any) {
+  private handleLoadingFailed(tabId: number, params: any, sessionId?: string) {
     const captureInfo = this.captureData.get(tabId);
     if (!captureInfo) return;
 
     const { requestId, errorText, canceled, type } = params;
-    const requestInfo: NetworkRequestInfo = captureInfo.requests[requestId];
+    const requestInfo: NetworkRequestInfo = captureInfo.requests[requestKey(sessionId, requestId)];
 
     if (!requestInfo) {
       // console.warn(`NetworkDebuggerStartTool: LoadingFailed for unknown requestId ${requestId} on tab ${tabId}`);
@@ -524,8 +583,9 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
   private async getResponseBody(
     tabId: number,
     requestId: string,
+    sessionId?: string,
   ): Promise<{ body: string; base64Encoded: boolean } | null> {
-    const pendingKey = `${tabId}_${requestId}`;
+    const pendingKey = `${tabId}_${requestKey(sessionId, requestId)}`;
     if (this.pendingResponseBodies.has(pendingKey)) {
       return this.pendingResponseBodies.get(pendingKey)!; // Return existing promise
     }
@@ -533,9 +593,12 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
     const responseBodyPromise = (async () => {
       try {
         // Will attach temporarily if needed
-        const result = (await cdpSessionManager.sendCommand(tabId, 'Network.getResponseBody', {
-          requestId,
-        })) as { body: string; base64Encoded: boolean };
+        const result = (await cdpSessionManager.sendCommand(
+          tabId,
+          'Network.getResponseBody',
+          { requestId },
+          sessionId,
+        )) as { body: string; base64Encoded: boolean };
         return result;
       } finally {
         this.pendingResponseBodies.delete(pendingKey); // Clean up after promise resolves or rejects
@@ -559,6 +622,7 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
     this.lastActivityTime.delete(tabId);
     this.captureData.delete(tabId);
     this.requestCounters.delete(tabId);
+    this.childTargets.forget(tabId);
 
     // Abort pending getResponseBody calls for this tab
     // Note: Promises themselves cannot be "aborted" externally in a standard way once created.
@@ -598,6 +662,10 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
     }
 
     try {
+      // Release child sessions first: they only exist while the tab is attached
+      if (this.childTargets.isTracking(tabId)) {
+        await this.childTargets.stop(tabId);
+      }
       // Attempt to disable network and detach via manager; it will no-op if others own the session
       try {
         await cdpSessionManager.sendCommand(tabId, 'Network.disable');
@@ -645,6 +713,9 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
       // Remove debugger-internal fields not useful to callers
       delete (finalReq as any).loaderId;
       delete (finalReq as any).frameId;
+      // Expose only whether the request came from a cross-origin iframe
+      if ((finalReq as any).sessionId) finalReq.fromChildFrame = true;
+      delete (finalReq as any).sessionId;
 
       if (finalReq.requestHeaders) {
         finalReq.specificRequestHeaders = this.filterOutCommonHeaders(
@@ -680,7 +751,7 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
       requests: processedRequests,
       requestCount: processedRequests.length,
       totalRequestsReceivedBeforeLimit: captureInfo.limitReached
-        ? NetworkDebuggerStartTool.MAX_REQUESTS_PER_CAPTURE
+        ? captureInfo.maxRequests
         : processedRequests.length,
       requestLimitReached: !!captureInfo.limitReached,
       stoppedBy: isAutoStop
@@ -796,9 +867,11 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
       inactivityTimeout = DEFAULT_INACTIVITY_TIMEOUT_MS,
       includeStatic = false,
     } = args;
+    const maxRequests = normalizeMaxRequests(args.maxRequests);
+    const urlFilter = typeof args.urlFilter === 'string' ? args.urlFilter : '';
 
     console.log(
-      `NetworkDebuggerStartTool: Executing with args: url=${targetUrl}, maxTime=${maxCaptureTime}, inactivityTime=${inactivityTimeout}, includeStatic=${includeStatic}`,
+      `NetworkDebuggerStartTool: Executing with args: url=${targetUrl}, maxTime=${maxCaptureTime}, inactivityTime=${inactivityTimeout}, includeStatic=${includeStatic}, maxRequests=${maxRequests}, urlFilter=${urlFilter}`,
     );
 
     let tabToOperateOn: chrome.tabs.Tab | undefined;
@@ -839,6 +912,8 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
           maxCaptureTime,
           inactivityTimeout,
           includeStatic,
+          maxRequests,
+          urlFilter,
         });
       } catch (error: any) {
         return createErrorResponse(
@@ -858,7 +933,9 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
               maxCaptureTime,
               inactivityTimeout,
               includeStatic,
-              maxRequests: NetworkDebuggerStartTool.MAX_REQUESTS_PER_CAPTURE,
+              maxRequests,
+              urlFilter: urlFilter || undefined,
+              capturesIframes: this.childTargets.isTracking(tabId),
             }),
           },
         ],

@@ -13,6 +13,8 @@ interface NetworkCaptureToolParams {
   maxCaptureTime?: number;
   inactivityTimeout?: number;
   includeStatic?: boolean;
+  maxRequests?: number;
+  urlFilter?: string;
 }
 
 /**
@@ -103,15 +105,29 @@ class NetworkCaptureTool extends BaseBrowserToolExecutor {
       );
     }
 
-    const delegate = wantBody ? networkDebuggerStartTool : networkCaptureStartTool;
+    if (!wantBody && (args.maxRequests !== undefined || args.urlFilter !== undefined)) {
+      return createErrorResponse(
+        'Parameters [maxRequests] and [urlFilter] are only supported with needResponseBody=true.',
+      );
+    }
+
     const backend: NetworkCaptureBackend = wantBody ? 'debugger' : 'webRequest';
 
-    const result = await delegate.execute({
-      url: args.url,
-      maxCaptureTime: args.maxCaptureTime,
-      inactivityTimeout: args.inactivityTimeout,
-      includeStatic: args.includeStatic,
-    });
+    const result = wantBody
+      ? await networkDebuggerStartTool.execute({
+          url: args.url,
+          maxCaptureTime: args.maxCaptureTime,
+          inactivityTimeout: args.inactivityTimeout,
+          includeStatic: args.includeStatic,
+          maxRequests: args.maxRequests,
+          urlFilter: args.urlFilter,
+        })
+      : await networkCaptureStartTool.execute({
+          url: args.url,
+          maxCaptureTime: args.maxCaptureTime,
+          inactivityTimeout: args.inactivityTimeout,
+          includeStatic: args.includeStatic,
+        });
 
     return decorateJsonResult(result, { backend, needResponseBody: wantBody });
   }
