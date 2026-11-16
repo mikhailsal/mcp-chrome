@@ -3,6 +3,7 @@ import { BaseBrowserToolExecutor } from '../base-browser';
 import { TOOL_NAMES } from 'chrome-mcp-shared';
 import { networkCaptureStartTool, networkCaptureStopTool } from './network-capture-web-request';
 import { networkDebuggerStartTool, networkDebuggerStopTool } from './network-capture-debugger';
+import { redactCaptureResultHeaders } from '@/utils/header-redaction';
 
 type NetworkCaptureBackend = 'webRequest' | 'debugger';
 
@@ -15,6 +16,7 @@ interface NetworkCaptureToolParams {
   includeStatic?: boolean;
   maxRequests?: number | string;
   urlFilter?: string;
+  includeSensitiveHeaders?: boolean;
 }
 
 /**
@@ -47,6 +49,28 @@ function decorateJsonResult(result: ToolResult, extra: Record<string, unknown>):
 }
 
 /**
+ * Replace credential header values in a capture result with a placeholder
+ */
+function redactResultHeaders(result: ToolResult): ToolResult {
+  const text = getFirstText(result);
+  if (typeof text !== 'string' || result.isError) return result;
+
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const redactedHeaderCount = redactCaptureResultHeaders(parsed);
+      return {
+        ...result,
+        content: [{ type: 'text', text: JSON.stringify({ ...parsed, redactedHeaderCount }) }],
+      };
+    }
+  } catch {
+    // Not JSON: nothing to redact
+  }
+  return result;
+}
+
+/**
  * Check if debugger-based capture is active
  */
 function isDebuggerCaptureActive(): boolean {
@@ -73,6 +97,8 @@ function isWebRequestCaptureActive(): boolean {
  */
 class NetworkCaptureTool extends BaseBrowserToolExecutor {
   name = TOOL_NAMES.BROWSER.NETWORK_CAPTURE;
+  // Chosen at start, applied when the capture result is returned at stop
+  private includeSensitiveHeaders = false;
 
   async execute(args: NetworkCaptureToolParams): Promise<ToolResult> {
     const action = args?.action;
@@ -129,7 +155,15 @@ class NetworkCaptureTool extends BaseBrowserToolExecutor {
           includeStatic: args.includeStatic,
         });
 
-    return decorateJsonResult(result, { backend, needResponseBody: wantBody });
+    if (!result.isError) {
+      this.includeSensitiveHeaders = args.includeSensitiveHeaders === true;
+    }
+
+    return decorateJsonResult(result, {
+      backend,
+      needResponseBody: wantBody,
+      includeSensitiveHeaders: args.includeSensitiveHeaders === true,
+    });
   }
 
   private async handleStop(
@@ -162,7 +196,9 @@ class NetworkCaptureTool extends BaseBrowserToolExecutor {
 
     const delegateStop =
       backendToStop === 'debugger' ? networkDebuggerStopTool : networkCaptureStopTool;
-    const result = await delegateStop.execute();
+    const rawResult = await delegateStop.execute();
+    const result = this.includeSensitiveHeaders ? rawResult : redactResultHeaders(rawResult);
+    this.includeSensitiveHeaders = false;
 
     return decorateJsonResult(result, {
       backend: backendToStop,

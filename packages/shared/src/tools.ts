@@ -703,6 +703,11 @@ export const TOOL_SCHEMAS: Tool[] = [
           description:
             'Only with needResponseBody=true. Store only requests whose URL contains this substring, so unrelated requests do not use up maxRequests.',
         },
+        includeSensitiveHeaders: {
+          type: 'boolean',
+          description:
+            'For action="start". By default the values of credential headers (Authorization, Cookie, Set-Cookie, and headers whose name contains token, secret, api-key, session, csrf, signature or password) are returned as "[REDACTED]". Set true to return them unchanged, only when debugging authentication itself. Response bodies and URLs are never redacted.',
+        },
       },
       required: ['action'],
     },
