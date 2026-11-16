@@ -111,8 +111,73 @@ describe('debugger network capture of cross-origin iframes', () => {
     expect(sendCommandCalls()).toContainEqual([
       { tabId: TAB_ID },
       'Target.setAutoAttach',
-      { autoAttach: true, waitForDebuggerOnStart: false, flatten: true },
+      { autoAttach: true, waitForDebuggerOnStart: true, flatten: true },
     ]);
+
+    await stopCapture();
+  });
+
+  it('enables network tracking in a new paused iframe before resuming it', async () => {
+    await startCapture();
+    emit('Target.attachedToTarget', {
+      sessionId: CHILD_SESSION,
+      targetInfo: { type: 'iframe', url: 'https://frame.test/' },
+      waitingForDebugger: true,
+    });
+    await flushAsync();
+
+    const childCalls = sendCommandCalls().filter(([target]) => target.sessionId === CHILD_SESSION);
+    expect(childCalls.map(([, method]) => method)).toEqual([
+      'Network.enable',
+      'Target.setAutoAttach',
+      'Runtime.runIfWaitingForDebugger',
+    ]);
+
+    await stopCapture();
+  });
+
+  it('resumes a paused iframe even when enabling its network tracking fails', async () => {
+    chromeApi.debugger.sendCommand = vi
+      .fn()
+      .mockImplementation(async (target: { sessionId?: string }, method: string) => {
+        if (target.sessionId && method === 'Network.enable') throw new Error('target closed');
+        return {};
+      });
+
+    await startCapture();
+    emit('Target.attachedToTarget', {
+      sessionId: CHILD_SESSION,
+      targetInfo: { type: 'iframe' },
+      waitingForDebugger: true,
+    });
+    await flushAsync();
+
+    expect(sendCommandCalls()).toContainEqual([
+      { tabId: TAB_ID, sessionId: CHILD_SESSION },
+      'Runtime.runIfWaitingForDebugger',
+      undefined,
+    ]);
+
+    await stopCapture();
+  });
+
+  it('resumes a paused non-frame target before releasing it', async () => {
+    await startCapture();
+    emit('Target.attachedToTarget', {
+      sessionId: 'worker-2',
+      targetInfo: { type: 'worker' },
+      waitingForDebugger: true,
+    });
+    await flushAsync();
+
+    const methods = sendCommandCalls()
+      .filter(
+        ([target, , params]) =>
+          target.sessionId === 'worker-2' ||
+          (params as { sessionId?: string } | undefined)?.sessionId === 'worker-2',
+      )
+      .map(([, method]) => method);
+    expect(methods).toEqual(['Runtime.runIfWaitingForDebugger', 'Target.detachFromTarget']);
 
     await stopCapture();
   });
@@ -229,6 +294,13 @@ describe('debugger network capture of cross-origin iframes', () => {
       'Target.setAutoAttach',
       { autoAttach: false, waitForDebuggerOnStart: false, flatten: true },
     ]);
+    // Auto-attach goes off first, so no new target is left paused during shutdown.
+    const methods = sendCommandCalls().map(
+      ([target, method]) => `${target.sessionId ?? ''}${method}`,
+    );
+    expect(methods.lastIndexOf('Target.setAutoAttach')).toBeLessThan(
+      methods.indexOf(`${CHILD_SESSION}Network.disable`),
+    );
   });
 
   it('falls back to top-frame capture when auto-attach is not available', async () => {
@@ -265,6 +337,23 @@ describe('debugger network capture limits', () => {
     const data = await stopCapture();
 
     expect(data.requests.map((r) => r.url)).toEqual(['https://api.test/workflow/1']);
+  });
+
+  it('drops a matching request that redirects to a URL outside urlFilter', async () => {
+    await startCapture({ urlFilter: '/workflow/' });
+    emit('Network.requestWillBeSent', {
+      requestId: '2.1',
+      request: { url: 'https://api.test/workflow/1', method: 'GET', headers: {} },
+      timestamp: 1,
+      type: 'XHR',
+    });
+    // Redirect: same request id, new URL that the filter excludes
+    emitJsonRequest('2.1', 'https://api.test/login');
+    emitJsonRequest('2.2', 'https://api.test/workflow/2');
+
+    const data = await stopCapture();
+
+    expect(data.requests.map((r) => r.url)).toEqual(['https://api.test/workflow/2']);
   });
 
   it('stops storing requests once maxRequests is reached', async () => {

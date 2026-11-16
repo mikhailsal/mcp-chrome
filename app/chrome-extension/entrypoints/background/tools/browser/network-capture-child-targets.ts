@@ -8,17 +8,23 @@ import { cdpSessionManager } from '@/utils/cdp-session-manager';
  * `Target.setAutoAttach` with `flatten: true` makes Chrome attach to those
  * targets and deliver their events on the tab's debugger connection, tagged
  * with a `sessionId`.
+ *
+ * `waitForDebuggerOnStart` pauses each new child target before it runs any script,
+ * so the Network domain is enabled before the frame's first request. Every paused
+ * target is resumed with `Runtime.runIfWaitingForDebugger`, whether it is captured
+ * or released.
  */
 
 /** Target types whose network traffic belongs to the page being captured. */
 const CAPTURED_TARGET_TYPES = new Set(['iframe']);
 
-const AUTO_ATTACH_ON = { autoAttach: true, waitForDebuggerOnStart: false, flatten: true };
+const AUTO_ATTACH_ON = { autoAttach: true, waitForDebuggerOnStart: true, flatten: true };
 const AUTO_ATTACH_OFF = { autoAttach: false, waitForDebuggerOnStart: false, flatten: true };
 
 interface AttachedToTargetParams {
   sessionId?: string;
   targetInfo?: { type?: string; url?: string };
+  waitingForDebugger?: boolean;
 }
 
 interface DetachedFromTargetParams {
@@ -72,13 +78,11 @@ export class ChildTargetTracker {
   ): Promise<void> {
     const sessions = this.sessions.get(tabId);
     const sessionId = params.sessionId;
-    if (!sessions || !sessionId) return;
+    if (!sessionId) return;
 
-    if (!CAPTURED_TARGET_TYPES.has(params.targetInfo?.type ?? '')) {
-      // Not a frame (e.g. a worker). Release it so the debugger does not hold it.
-      await cdpSessionManager
-        .sendCommand(tabId, 'Target.detachFromTarget', { sessionId }, parentSessionId)
-        .catch(() => undefined);
+    if (!sessions || !CAPTURED_TARGET_TYPES.has(params.targetInfo?.type ?? '')) {
+      // Not a frame (e.g. a worker), or capture is stopping: let it run and release it.
+      await this.release(tabId, parentSessionId, sessionId, params.waitingForDebugger);
       return;
     }
 
@@ -94,7 +98,29 @@ export class ChildTargetTracker {
         `ChildTargetTracker: failed to enable network capture for child session of tab ${tabId}:`,
         error,
       );
+    } finally {
+      if (params.waitingForDebugger) await this.resume(tabId, sessionId);
     }
+  }
+
+  /** Resume a target paused by `waitForDebuggerOnStart`. Best-effort. */
+  private async resume(tabId: number, sessionId: string): Promise<void> {
+    await cdpSessionManager
+      .sendCommand(tabId, 'Runtime.runIfWaitingForDebugger', undefined, sessionId)
+      .catch(() => undefined);
+  }
+
+  /** Resume (if paused) and detach a target we do not capture. */
+  private async release(
+    tabId: number,
+    parentSessionId: string | undefined,
+    sessionId: string,
+    waitingForDebugger: boolean | undefined,
+  ): Promise<void> {
+    if (waitingForDebugger) await this.resume(tabId, sessionId);
+    await cdpSessionManager
+      .sendCommand(tabId, 'Target.detachFromTarget', { sessionId }, parentSessionId)
+      .catch(() => undefined);
   }
 
   /**
@@ -105,14 +131,15 @@ export class ChildTargetTracker {
     const sessionIds = this.getSessionIds(tabId);
     this.sessions.delete(tabId);
 
+    // Turn auto-attach off first so no new target is paused waiting for us.
+    await cdpSessionManager
+      .sendCommand(tabId, 'Target.setAutoAttach', AUTO_ATTACH_OFF)
+      .catch(() => undefined);
     for (const sessionId of sessionIds) {
       await cdpSessionManager
         .sendCommand(tabId, 'Network.disable', undefined, sessionId)
         .catch(() => undefined);
     }
-    await cdpSessionManager
-      .sendCommand(tabId, 'Target.setAutoAttach', AUTO_ATTACH_OFF)
-      .catch(() => undefined);
   }
 
   /** Drop state without talking to the debugger (tab closed or debugger detached). */
