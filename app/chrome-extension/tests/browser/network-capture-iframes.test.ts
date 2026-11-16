@@ -368,6 +368,32 @@ describe('debugger network capture limits', () => {
     expect(data.requestLimitReached).toBe(true);
   });
 
+  it('accepts maxRequests sent as a numeric string', async () => {
+    await startCapture({ maxRequests: '2' });
+    emitJsonRequest('1.1', 'https://api.test/a');
+    emitJsonRequest('1.2', 'https://api.test/b');
+    emitJsonRequest('1.3', 'https://api.test/c');
+
+    const data = await stopCapture();
+
+    expect(data.requestCount).toBe(2);
+    expect(data.requestLimitReached).toBe(true);
+  });
+
+  it.each(['abc', 0, -5, ''])(
+    'rejects maxRequests=%j instead of using the default',
+    async (bad) => {
+      const result = await networkCaptureTool.execute({
+        action: 'start',
+        needResponseBody: true,
+        maxRequests: bad,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(chromeApi.debugger.attach).not.toHaveBeenCalled();
+    },
+  );
+
   it('rejects maxRequests and urlFilter in webRequest mode', async () => {
     const result = await networkCaptureTool.execute({ action: 'start', urlFilter: '/api/' });
 

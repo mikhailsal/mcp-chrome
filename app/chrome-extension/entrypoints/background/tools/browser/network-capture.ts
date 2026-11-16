@@ -13,7 +13,7 @@ interface NetworkCaptureToolParams {
   maxCaptureTime?: number;
   inactivityTimeout?: number;
   includeStatic?: boolean;
-  maxRequests?: number;
+  maxRequests?: number | string;
   urlFilter?: string;
 }
 

@@ -10,7 +10,7 @@ interface NetworkDebuggerStartToolParams {
   maxCaptureTime?: number;
   inactivityTimeout?: number; // Inactivity timeout (milliseconds)
   includeStatic?: boolean; // if include static resources
-  maxRequests?: number; // Max requests to store for this capture
+  maxRequests?: number | string; // Max requests to store for this capture
   urlFilter?: string; // Only store requests whose URL contains this substring
 }
 
@@ -62,11 +62,16 @@ function requestKey(sessionId: string | undefined, requestId: string): string {
   return sessionId ? `${sessionId}:${requestId}` : requestId;
 }
 
-function normalizeMaxRequests(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 1) {
-    return DEFAULT_MAX_REQUESTS;
-  }
-  return Math.min(Math.floor(value), MAX_REQUESTS_UPPER_BOUND);
+/**
+ * Resolve the `maxRequests` argument. MCP clients that do not know the parameter's
+ * type may send it as a string, so numeric strings are accepted.
+ * @returns the limit to use, or null if the value is not a positive number
+ */
+function parseMaxRequests(value: unknown): number | null {
+  if (value === undefined || value === null) return DEFAULT_MAX_REQUESTS;
+  const parsed = typeof value === 'string' && value.trim() !== '' ? Number(value) : value;
+  if (typeof parsed !== 'number' || !Number.isFinite(parsed) || parsed < 1) return null;
+  return Math.min(Math.floor(parsed), MAX_REQUESTS_UPPER_BOUND);
 }
 
 /**
@@ -869,7 +874,12 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
       inactivityTimeout = DEFAULT_INACTIVITY_TIMEOUT_MS,
       includeStatic = false,
     } = args;
-    const maxRequests = normalizeMaxRequests(args.maxRequests);
+    const maxRequests = parseMaxRequests(args.maxRequests);
+    if (maxRequests === null) {
+      return createErrorResponse(
+        `Parameter [maxRequests] must be a positive number (max ${MAX_REQUESTS_UPPER_BOUND}).`,
+      );
+    }
     const urlFilter = typeof args.urlFilter === 'string' ? args.urlFilter : '';
 
     console.log(
