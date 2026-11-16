@@ -662,7 +662,7 @@ export const TOOL_SCHEMAS: Tool[] = [
   {
     name: TOOL_NAMES.BROWSER.NETWORK_CAPTURE,
     description:
-      'Unified network capture tool. Use action="start" to begin capturing, action="stop" to end and retrieve results. Set needResponseBody=true to capture response bodies (uses Debugger API, may conflict with DevTools). Default mode uses webRequest API (lightweight, no debugger conflict, but no response body).',
+      'Unified network capture tool. Use action="start" to begin capturing, action="stop" to end and retrieve results. Set needResponseBody=true to capture response bodies (uses Debugger API, may conflict with DevTools); this mode also captures requests made by cross-origin iframes, marked with fromChildFrame=true. Default mode uses webRequest API (lightweight, no debugger conflict, but no response body).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -692,6 +692,16 @@ export const TOOL_SCHEMAS: Tool[] = [
         includeStatic: {
           type: 'boolean',
           description: 'Include static resources like images/scripts/styles (default: false)',
+        },
+        maxRequests: {
+          type: 'number',
+          description:
+            'Only with needResponseBody=true. Maximum number of requests to store (default: 100, max: 2000). Later requests are dropped and requestLimitReached is set.',
+        },
+        urlFilter: {
+          type: 'string',
+          description:
+            'Only with needResponseBody=true. Store only requests whose URL contains this substring, so unrelated requests do not use up maxRequests.',
         },
       },
       required: ['action'],

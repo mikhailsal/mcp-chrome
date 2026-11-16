@@ -93,9 +93,25 @@ class CDPSessionManager {
   /**
    * Send a CDP command. Requires that this manager has attached to the tab.
    * If not attached by us, will attempt a one-shot attach around the call.
+   *
+   * Pass `sessionId` to address a child protocol session of the tab (for example a
+   * cross-origin iframe attached through `Target.setAutoAttach` with `flatten: true`).
+   * A child session only exists while the tab stays attached, so there is no
+   * one-shot fallback for it.
    */
-  async sendCommand<T = any>(tabId: number, method: string, params?: object): Promise<T> {
+  async sendCommand<T = any>(
+    tabId: number,
+    method: string,
+    params?: object,
+    sessionId?: string,
+  ): Promise<T> {
     const state = this.getState(tabId);
+    if (sessionId) {
+      if (!state || !state.attachedByUs) {
+        throw new Error(`Debugger is not attached to tab ${tabId}; child session is gone`);
+      }
+      return (await chrome.debugger.sendCommand({ tabId, sessionId }, method, params)) as T;
+    }
     if (state && state.attachedByUs) {
       return (await chrome.debugger.sendCommand({ tabId }, method, params)) as T;
     }
