@@ -259,9 +259,8 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
     if (!captureInfo) return; // Not capturing for this tab
 
     if (method.startsWith('Target.')) {
-      if (this.childTargets.isTracking(tabId)) {
-        void this.childTargets.handleEvent(tabId, sessionId, method, params);
-      }
+      // Always forwarded: a paused new target must be resumed even while capture stops.
+      void this.childTargets.handleEvent(tabId, sessionId, method, params);
       return;
     }
 
@@ -392,16 +391,19 @@ class NetworkDebuggerStartTool extends BaseBrowserToolExecutor {
     const { requestId, request, timestamp, type, loaderId, frameId } = params;
     const key = requestKey(sessionId, requestId);
 
-    // Caller-supplied filter: keep only matching requests so they do not use up the limit
-    if (captureInfo.urlFilter && !String(request.url || '').includes(captureInfo.urlFilter)) {
-      return;
-    }
-
-    // Initial filtering by URL (ads, analytics) and extension (if !includeStatic)
+    // Caller-supplied filter (keeps non-matching requests from using up the limit),
+    // ads/analytics, and static extensions unless includeStatic.
     if (
+      (captureInfo.urlFilter && !String(request.url || '').includes(captureInfo.urlFilter)) ||
       this.shouldFilterRequestByUrl(request.url) ||
       this.shouldFilterRequestByExtension(request.url, captureInfo.includeStatic)
     ) {
+      // A redirect keeps its request id. Drop a stored request whose redirect leads to an
+      // excluded URL, or the excluded response would be recorded under the original URL.
+      if (captureInfo.requests[key]) {
+        delete captureInfo.requests[key];
+        this.requestCounters.set(tabId, Object.keys(captureInfo.requests).length);
+      }
       return;
     }
 
