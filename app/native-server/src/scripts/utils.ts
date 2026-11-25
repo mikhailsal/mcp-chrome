@@ -3,7 +3,8 @@ import path from 'path';
 import os from 'os';
 import { execSync } from 'child_process';
 import { promisify } from 'util';
-import { COMMAND_NAME, DESCRIPTION, EXTENSION_ID, HOST_NAME } from './constant';
+import { COMMAND_NAME, DESCRIPTION, HOST_NAME } from './constant';
+import { collectAllowedOrigins } from './allowed-origins';
 import { BrowserType, getBrowserConfig, detectInstalledBrowsers } from './browser-config';
 
 export const access = promisify(fs.access);
@@ -232,9 +233,7 @@ async function ensureWindowsFilePermissions(packageDistDir: string): Promise<voi
   }
 }
 
-/**
- * Create Native Messaging host manifest content
- */
+/** Create the Native Messaging host manifest (keeps origins already allowed). */
 export async function createManifestContent(): Promise<any> {
   const mainPath = await getMainPath();
 
@@ -243,7 +242,7 @@ export async function createManifestContent(): Promise<any> {
     description: DESCRIPTION,
     path: mainPath, // Node.js executable path
     type: 'stdio',
-    allowed_origins: [`chrome-extension://${EXTENSION_ID}/`],
+    allowed_origins: collectAllowedOrigins(),
   };
 }
 

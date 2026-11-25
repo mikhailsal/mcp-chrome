@@ -29,6 +29,7 @@ import { CodexEngine } from '../agent/engines/codex';
 import { ClaudeEngine } from '../agent/engines/claude';
 import { closeDb } from '../agent/db';
 import { registerAgentRoutes } from './routes';
+import { listenWithFallback } from '../instances/listen';
 
 // ============================================================
 // Types
@@ -114,6 +115,15 @@ export class Server {
         status: 'ok',
         message: 'pong',
       });
+    });
+
+    // Identity of this host, used by MCP clients to tell browsers apart.
+    this.fastify.get('/instance', async (_request: FastifyRequest, reply: FastifyReply) => {
+      const record = this.nativeHost?.getInstanceRecord();
+      if (!record) {
+        return reply.status(HTTP_STATUS.NOT_FOUND).send({ error: 'Instance not registered' });
+      }
+      return reply.status(HTTP_STATUS.OK).send(record);
     });
   }
 
@@ -316,7 +326,11 @@ export class Server {
   // Server Lifecycle
   // ============================================================
 
-  public async start(port = NATIVE_SERVER_PORT, nativeHost: NativeMessagingHost): Promise<void> {
+  /**
+   * Listen on `port`, or on the next free port when another browser profile
+   * already uses it. Resolves with the port actually bound.
+   */
+  public async start(port = NATIVE_SERVER_PORT, nativeHost: NativeMessagingHost): Promise<number> {
     if (!this.nativeHost) {
       this.nativeHost = nativeHost;
     } else if (this.nativeHost !== nativeHost) {
@@ -324,17 +338,21 @@ export class Server {
     }
 
     if (this.isRunning) {
-      return;
+      return this.boundPort();
     }
 
     try {
-      await this.fastify.listen({ port, host: SERVER_CONFIG.HOST });
+      const boundPort = await listenWithFallback(async (candidate) => {
+        await this.fastify.listen({ port: candidate, host: SERVER_CONFIG.HOST });
+        return this.boundPort();
+      }, port);
 
       // Set port environment variables after successful listen for Chrome MCP URL resolution
-      process.env.CHROME_MCP_PORT = String(port);
-      process.env.MCP_HTTP_PORT = String(port);
+      process.env.CHROME_MCP_PORT = String(boundPort);
+      process.env.MCP_HTTP_PORT = String(boundPort);
 
       this.isRunning = true;
+      return boundPort;
     } catch (err) {
       this.isRunning = false;
       throw err;
@@ -355,6 +373,11 @@ export class Server {
       closeDb();
       throw err;
     }
+  }
+
+  private boundPort(): number {
+    const address = this.fastify.server.address();
+    return address && typeof address === 'object' ? address.port : 0;
   }
 
   public getInstance(): FastifyInstance {

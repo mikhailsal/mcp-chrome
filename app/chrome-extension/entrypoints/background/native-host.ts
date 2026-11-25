@@ -4,18 +4,13 @@ import { NATIVE_HOST, STORAGE_KEYS, ERROR_MESSAGES, SUCCESS_MESSAGES } from '@/c
 import { handleCallTool } from './tools';
 import { listPublished, getFlow } from './record-replay/flow-store';
 import { acquireKeepalive } from './keepalive-manager';
+import { prepareInstanceHello, type InstanceHello } from './instance-identity';
+import { getReconnectDelayMs, normalizePort } from './native-host-reconnect';
 
 const LOG_PREFIX = '[NativeHost]';
 
 let nativePort: chrome.runtime.Port | null = null;
 export const HOST_NAME = NATIVE_HOST.NAME;
-
-// ==================== Reconnect Configuration ====================
-
-const RECONNECT_BASE_DELAY_MS = 500;
-const RECONNECT_MAX_DELAY_MS = 60_000;
-const RECONNECT_MAX_FAST_ATTEMPTS = 8;
-const RECONNECT_COOLDOWN_DELAY_MS = 5 * 60_000;
 
 // ==================== Auto-connect State ====================
 
@@ -84,41 +79,7 @@ function broadcastServerStatusChange(status: ServerStatus): void {
     });
 }
 
-// ==================== Port Normalization ====================
-
-/**
- * Normalize a port value to a valid port number or null.
- */
-function normalizePort(value: unknown): number | null {
-  const n =
-    typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
-  if (!Number.isFinite(n)) return null;
-  const port = Math.floor(n);
-  if (port <= 0 || port > 65535) return null;
-  return port;
-}
-
 // ==================== Reconnect Utilities ====================
-
-/**
- * Add jitter to a delay value to avoid thundering herd.
- */
-function withJitter(ms: number): number {
-  const ratio = 0.7 + Math.random() * 0.6;
-  return Math.max(0, Math.round(ms * ratio));
-}
-
-/**
- * Calculate reconnect delay based on attempt number.
- * Uses exponential backoff with jitter, then switches to cooldown interval.
- */
-function getReconnectDelayMs(attempt: number): number {
-  if (attempt >= RECONNECT_MAX_FAST_ATTEMPTS) {
-    return withJitter(RECONNECT_COOLDOWN_DELAY_MS);
-  }
-  const delay = Math.min(RECONNECT_BASE_DELAY_MS * Math.pow(2, attempt), RECONNECT_MAX_DELAY_MS);
-  return withJitter(delay);
-}
 
 /**
  * Clear the reconnect timer if active.
@@ -313,7 +274,7 @@ async function ensureNativeConnected(trigger: string, portOverride?: unknown): P
     console.debug(`${LOG_PREFIX} Attempting connection on port ${port} (trigger=${trigger})`);
 
     // Attempt connection
-    const ok = connectNativeHost(port);
+    const ok = connectNativeHost(port, await prepareInstanceHello());
     if (!ok) {
       console.warn(`${LOG_PREFIX} Connection failed (trigger=${trigger})`);
       scheduleReconnect(`connect_failed:${trigger}`);
@@ -332,10 +293,34 @@ async function ensureNativeConnected(trigger: string, portOverride?: unknown): P
 }
 
 /**
+ * Published record-replay flows, as the native host exposes them as MCP tools.
+ */
+async function listPublishedFlowItems(): Promise<any[]> {
+  const items = [] as any[];
+  for (const p of await listPublished()) {
+    const flow = await getFlow(p.id);
+    if (!flow) continue;
+    items.push({
+      id: p.id,
+      slug: p.slug,
+      version: p.version,
+      name: p.name,
+      description: p.description || flow.description || '',
+      variables: flow.variables || [],
+      meta: flow.meta || {},
+    });
+  }
+  return items;
+}
+
+/**
  * Connect to the native messaging host
  * @returns Whether the connection was initiated successfully
  */
-export function connectNativeHost(port: number = NATIVE_HOST.DEFAULT_PORT): boolean {
+export function connectNativeHost(
+  port: number = NATIVE_HOST.DEFAULT_PORT,
+  hello?: InstanceHello,
+): boolean {
   if (nativePort) {
     return true;
   }
@@ -381,21 +366,7 @@ export function connectNativeHost(port: number = NATIVE_HOST.DEFAULT_PORT): bool
       } else if (message.type === 'rr_list_published_flows' && message.requestId) {
         const requestId = message.requestId;
         try {
-          const published = await listPublished();
-          const items = [] as any[];
-          for (const p of published) {
-            const flow = await getFlow(p.id);
-            if (!flow) continue;
-            items.push({
-              id: p.id,
-              slug: p.slug,
-              version: p.version,
-              name: p.name,
-              description: p.description || flow.description || '',
-              variables: flow.variables || [],
-              meta: flow.meta || {},
-            });
-          }
+          const items = await listPublishedFlowItems();
           nativePort?.postMessage({
             responseToRequestId: requestId,
             payload: { status: 'success', items },
@@ -453,7 +424,7 @@ export function connectNativeHost(port: number = NATIVE_HOST.DEFAULT_PORT): bool
       scheduleReconnect('native_port_disconnected');
     });
 
-    nativePort.postMessage({ type: NativeMessageType.START, payload: { port } });
+    nativePort.postMessage({ type: NativeMessageType.START, payload: { port, ...hello } });
     // Note: Don't reset reconnect state here. Wait for SERVER_STARTED confirmation.
     // Chrome may return a Port but disconnect immediately if native host is missing.
     return true;

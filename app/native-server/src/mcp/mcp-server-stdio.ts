@@ -4,7 +4,6 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import {
   CallToolRequestSchema,
-  CallToolResult,
   ListToolsRequestSchema,
   ListResourcesRequestSchema,
   ListPromptsRequestSchema,
@@ -14,9 +13,15 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import * as fs from 'fs';
 import * as path from 'path';
+import { discoverBrowsers } from './browser-hub/discovery';
+import { BrowserHub } from './browser-hub/hub';
+import { BrowserRouter } from './browser-hub/router';
+
+// Use a sane default of 2 minutes for tool calls; listing browsers must stay quick.
+const CALL_TIMEOUT_MS = 2 * 60 * 1000;
+const LIST_TIMEOUT_MS = 5000;
 
 let stdioMcpServer: Server | null = null;
-let mcpClient: Client | null = null;
 
 const log = (level: string, ...args: unknown[]) => {
   const ts = new Date().toISOString();
@@ -25,18 +30,57 @@ const log = (level: string, ...args: unknown[]) => {
   );
 };
 
-// Read configuration from stdio-config.json
-const loadConfig = () => {
+/**
+ * URL of a host that predates the instance registry (stdio-config.json).
+ * Hosts that register themselves are found without it.
+ */
+const loadConfiguredUrl = (): string | undefined => {
   try {
     const configPath = path.join(__dirname, 'stdio-config.json');
-    const configData = fs.readFileSync(configPath, 'utf8');
-    const config = JSON.parse(configData);
-    log('info', 'Loaded config:', config);
-    return config;
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    return typeof config.url === 'string' ? config.url : undefined;
   } catch (error) {
-    log('error', 'Failed to load stdio-config.json:', String(error));
-    throw new Error('Configuration file stdio-config.json not found or invalid');
+    log('warn', 'stdio-config.json not readable, relying on the instance registry:', String(error));
+    return undefined;
   }
+};
+
+const connectClient = async (url: string): Promise<Client> => {
+  log('info', `Connecting to browser host: ${url}`);
+  const client = new Client({ name: 'Mcp Chrome Proxy', version: '1.0.0' }, { capabilities: {} });
+  await client.connect(new StreamableHTTPClientTransport(new URL(url), {}));
+  return client;
+};
+
+/** `configuredUrl` defaults to stdio-config.json; pass `{}` for registry-only discovery. */
+export const createBrowserHub = (
+  options: { configuredUrl?: string } = { configuredUrl: loadConfiguredUrl() },
+): BrowserHub => {
+  const router = new BrowserRouter({
+    discover: () => discoverBrowsers(options.configuredUrl),
+    connect: connectClient,
+  });
+  return new BrowserHub(router, { callTimeoutMs: CALL_TIMEOUT_MS, listTimeoutMs: LIST_TIMEOUT_MS });
+};
+
+export const setupTools = (server: Server, hub: BrowserHub = createBrowserHub()) => {
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: hub.listTools(TOOL_SCHEMAS),
+  }));
+
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const { name } = request.params;
+    log('info', `Tool call: ${name}`);
+    const result = await hub.callTool(name, request.params.arguments || {});
+    log('info', `Tool call ${name} completed, isError=${Boolean(result.isError)}`);
+    return result;
+  });
+
+  // List resources handler - REQUIRED BY MCP PROTOCOL
+  server.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources: [] }));
+
+  // List prompts handler - REQUIRED BY MCP PROTOCOL
+  server.setRequestHandler(ListPromptsRequestSchema, async () => ({ prompts: [] }));
 };
 
 export const getStdioMcpServer = () => {
@@ -61,75 +105,6 @@ export const getStdioMcpServer = () => {
   return stdioMcpServer;
 };
 
-export const ensureMcpClient = async () => {
-  try {
-    if (mcpClient) {
-      log('info', 'Pinging existing MCP client...');
-      const pingResult = await mcpClient.ping();
-      if (pingResult) {
-        log('info', 'Existing client alive');
-        return mcpClient;
-      }
-    }
-
-    const config = loadConfig();
-    log('info', `Connecting to backend: ${config.url}`);
-    mcpClient = new Client({ name: 'Mcp Chrome Proxy', version: '1.0.0' }, { capabilities: {} });
-    const transport = new StreamableHTTPClientTransport(new URL(config.url), {});
-    await mcpClient.connect(transport);
-    log('info', 'Connected to backend successfully');
-    return mcpClient;
-  } catch (error: any) {
-    mcpClient?.close();
-    mcpClient = null;
-    log('error', `Failed to connect to MCP server: ${error?.message || String(error)}`);
-  }
-};
-
-export const setupTools = (server: Server) => {
-  // List tools handler
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOL_SCHEMAS }));
-
-  // Call tool handler
-  server.setRequestHandler(CallToolRequestSchema, async (request) =>
-    handleToolCall(request.params.name, request.params.arguments || {}),
-  );
-
-  // List resources handler - REQUIRED BY MCP PROTOCOL
-  server.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources: [] }));
-
-  // List prompts handler - REQUIRED BY MCP PROTOCOL
-  server.setRequestHandler(ListPromptsRequestSchema, async () => ({ prompts: [] }));
-};
-
-const handleToolCall = async (name: string, args: any): Promise<CallToolResult> => {
-  try {
-    log('info', `Tool call: ${name}`, args);
-    const client = await ensureMcpClient();
-    if (!client) {
-      throw new Error('Failed to connect to MCP server');
-    }
-    // Use a sane default of 2 minutes; the previous value mistakenly used 2*6*1000 (12s)
-    const DEFAULT_CALL_TIMEOUT_MS = 2 * 60 * 1000;
-    const result = await client.callTool({ name, arguments: args }, undefined, {
-      timeout: DEFAULT_CALL_TIMEOUT_MS,
-    });
-    log('info', `Tool call ${name} completed, isError=${(result as any).isError}`);
-    return result as CallToolResult;
-  } catch (error: any) {
-    log('error', `Tool call ${name} failed: ${error.message}`);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error calling tool: ${error.message}`,
-        },
-      ],
-      isError: true,
-    };
-  }
-};
-
 async function main() {
   log('info', 'Starting stdio MCP bridge...');
   const transport = new StdioServerTransport();
@@ -137,7 +112,9 @@ async function main() {
   log('info', 'Stdio transport connected, bridge ready');
 }
 
-main().catch((error) => {
-  log('error', `Fatal error Chrome MCP Server main(): ${error?.message || String(error)}`);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((error) => {
+    log('error', `Fatal error Chrome MCP Server main(): ${error?.message || String(error)}`);
+    process.exit(1);
+  });
+}

@@ -1,4 +1,5 @@
 import { BACKGROUND_MESSAGE_TYPES } from '@/common/message-types';
+import { getServerPort } from '@/common/server-port';
 import {
   WEB_EDITOR_V2_ACTIONS,
   WEB_EDITOR_V1_ACTIONS,
@@ -14,7 +15,6 @@ import { openAgentChatSidepanel } from '../utils/sidepanel';
 
 const CONTEXT_MENU_ID = 'web_editor_toggle';
 const COMMAND_KEY = 'toggle_web_editor';
-const DEFAULT_NATIVE_SERVER_PORT = 12306;
 
 /** Storage key prefix for TX change session data (per-tab isolation) */
 const WEB_EDITOR_TX_CHANGED_SESSION_KEY_PREFIX = 'web-editor-v2-tx-changed-';
@@ -1007,14 +1007,8 @@ export function initWebEditorListeners(): void {
             }
 
             // Read server port and selected project
-            const stored = await chrome.storage.local.get([
-              'nativeServerPort',
-              'agent-selected-project-id',
-            ]);
-            const portRaw = stored.nativeServerPort;
-            const port = Number.isFinite(Number(portRaw))
-              ? Number(portRaw)
-              : DEFAULT_NATIVE_SERVER_PORT;
+            const stored = await chrome.storage.local.get(['agent-selected-project-id']);
+            const port = await getServerPort();
             const projectId = stored['agent-selected-project-id'];
 
             if (!projectId || typeof projectId !== 'string') {
@@ -1226,15 +1220,8 @@ export function initWebEditorListeners(): void {
           const senderWindowId = (_sender as chrome.runtime.MessageSender)?.tab?.windowId;
 
           // Read storage for server port and selected session
-          const stored = await chrome.storage.local.get([
-            'nativeServerPort',
-            STORAGE_KEY_SELECTED_SESSION,
-          ]);
-
-          const portRaw = stored?.nativeServerPort;
-          const port = Number.isFinite(Number(portRaw))
-            ? Number(portRaw)
-            : DEFAULT_NATIVE_SERVER_PORT;
+          const stored = await chrome.storage.local.get([STORAGE_KEY_SELECTED_SESSION]);
+          const port = await getServerPort();
 
           const sessionId = normalizeString(stored?.[STORAGE_KEY_SELECTED_SESSION]).trim();
 
@@ -1484,14 +1471,8 @@ export function initWebEditorListeners(): void {
           const sessionId =
             typeof senderTabId === 'number' ? `web-editor-${senderTabId}` : 'web-editor';
 
-          const stored = await chrome.storage.local.get([
-            'nativeServerPort',
-            'agent-selected-project-id',
-          ]);
-          const portRaw = stored?.nativeServerPort;
-          const port = Number.isFinite(Number(portRaw))
-            ? Number(portRaw)
-            : DEFAULT_NATIVE_SERVER_PORT;
+          const stored = await chrome.storage.local.get(['agent-selected-project-id']);
+          const port = await getServerPort();
 
           const projectId = normalizeString(stored?.['agent-selected-project-id']).trim() || '';
 
@@ -1588,8 +1569,7 @@ export function initWebEditorListeners(): void {
           }
 
           // Get server port
-          const stored = await chrome.storage.local.get(['nativeServerPort']);
-          const port = stored.nativeServerPort || DEFAULT_NATIVE_SERVER_PORT;
+          const port = await getServerPort();
 
           try {
             // Call cancel API

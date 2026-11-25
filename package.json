@@ -23,6 +23,8 @@
     "clean:modules": "pnpm -r exec rm -rf node_modules && rm -rf node_modules",
     "clean": "npm run clean:dist && npm run clean:modules",
     "typecheck": "pnpm -r exec tsc --noEmit",
+    "check": "node scripts/gate.mjs",
+    "check:size": "node scripts/check-size.mjs",
     "prepare": "husky"
   },
   "devDependencies": {

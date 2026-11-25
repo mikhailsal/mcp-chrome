@@ -16,7 +16,7 @@
 import type { AgentActRequest, RealtimeEvent } from 'chrome-mcp-shared';
 import { NativeMessageType } from 'chrome-mcp-shared';
 
-import { NATIVE_HOST, STORAGE_KEYS } from '@/common/constants';
+import { getServerPort } from '@/common/server-port';
 import {
   BACKGROUND_MESSAGE_TYPES,
   TOOL_MESSAGE_TYPES,
@@ -93,18 +93,6 @@ let initialized = false;
 
 function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value : '';
-}
-
-function normalizePort(value: unknown): number | null {
-  const num =
-    typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
-
-  if (!Number.isFinite(num)) return null;
-
-  const port = Math.floor(num);
-  if (port <= 0 || port > 65535) return null;
-
-  return port;
 }
 
 function createRequestId(): string {
@@ -592,12 +580,8 @@ async function handleSendToAI(
   }
 
   // Read server port and selected session from storage
-  const stored = await chrome.storage.local.get([
-    STORAGE_KEYS.NATIVE_SERVER_PORT,
-    STORAGE_KEY_SELECTED_SESSION,
-  ]);
-
-  const port = normalizePort(stored?.[STORAGE_KEYS.NATIVE_SERVER_PORT]) ?? NATIVE_HOST.DEFAULT_PORT;
+  const stored = await chrome.storage.local.get([STORAGE_KEY_SELECTED_SESSION]);
+  const port = await getServerPort();
   const sessionId = normalizeString(stored?.[STORAGE_KEY_SELECTED_SESSION]).trim();
 
   if (!sessionId) {
@@ -696,10 +680,7 @@ async function handleCancelAI(
 
   // Determine port
   let port = activeRequest?.port;
-  if (!port) {
-    const stored = await chrome.storage.local.get([STORAGE_KEYS.NATIVE_SERVER_PORT]);
-    port = normalizePort(stored?.[STORAGE_KEYS.NATIVE_SERVER_PORT]) ?? NATIVE_HOST.DEFAULT_PORT;
-  }
+  if (!port) port = await getServerPort();
 
   // Cancel on server (async, don't await)
   void cancelRequestOnServer(port, sessionId, requestId);

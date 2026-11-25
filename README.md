@@ -142,6 +142,24 @@ Example: configuration in Augment:
 
 <img width="494" alt="Augment MCP configuration example" src="https://github.com/user-attachments/assets/48eefc0c-a257-4d3b-8bbe-d7ff716de2bf" />
 
+### Several browsers or Chrome profiles at once
+
+Install the extension in every Chrome profile you want to control and keep them all connected. Nothing else needs configuring:
+
+- each profile starts its own bridge process; the first takes port 12306, the next ones take the next free port;
+- every bridge registers itself in `~/.local/state/mcp-chrome-bridge/instances/` (macOS: `~/Library/Application Support/mcp-chrome-bridge/instances/`, Windows: `%LOCALAPPDATA%\mcp-chrome-bridge\instances\`) and removes the entry when it stops;
+- the STDIO server reads that registry, names each browser after its Chrome profile ("Person 1", "Work") and routes every call to the right one.
+
+With the STDIO connection the agent gets two extra tools and one extra argument:
+
+- `list_browsers` shows every connected browser: id, profile name, window and tab counts, the active tab, which one has focus and which one is selected;
+- `select_browser` picks the browser for the rest of the session (by id, id prefix, profile name or profile folder);
+- every tool accepts an optional `browser` argument that overrides the selection for one call.
+
+With one browser connected nothing changes: calls go to it. With several and none selected, a call fails with the list of browsers instead of guessing, so the agent never acts in a profile it did not mean.
+
+The Streamable HTTP endpoint stays per browser: `http://127.0.0.1:12306/mcp` is the first profile, the popup of each profile shows its own port.
+
 ## 🛠️ Available Tools
 
 Complete tool list: [Complete Tool List](docs/TOOLS.md)

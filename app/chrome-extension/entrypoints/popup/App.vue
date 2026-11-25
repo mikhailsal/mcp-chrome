@@ -50,7 +50,7 @@
               <input
                 type="text"
                 id="port"
-                :value="nativeServerPort"
+                :value="(serverStatus.isRunning && serverStatus.port) || nativeServerPort"
                 @input="updatePort"
                 class="port-input"
               />
