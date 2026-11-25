@@ -112,6 +112,18 @@ class YourNewTool extends BaseBrowserToolExecutor {
 - **Comments**: Add JSDoc comments for public APIs
 - **Error Handling**: Always handle errors gracefully
 
+### Quality Gate
+
+`pnpm check` runs everything CI runs: the size check, ESLint, `tsc` and the unit tests of the root scripts (`node --test`), the native server and the extension. The pre-push hook runs the same command; `pnpm install` installs it (after `pnpm install --ignore-scripts`, run `pnpm run prepare`).
+
+Size limits, checked by `pnpm check:size` (`scripts/check-size.mjs`):
+
+- source files: 500 lines; test files: 1000 lines; functions: 80 lines;
+- older code over the limits is recorded in `size-allowlist.json` with its size at the time; an entry may shrink, never grow, and new entries need the maintainer's agreement;
+- after making an allowlisted file or function smaller, run `pnpm check:size --shrink` to lock in the new size.
+
+Split a file or function by responsibility before it crosses a limit. New modules go into the strict ESLint block in `eslint.config.js`. Known red spots that predate the gate are listed in `QUARANTINE` in `scripts/gate.mjs`; that list may only shrink.
+
 ## 📝 Pull Request Process
 
 1. **Create a feature branch**
@@ -207,9 +219,11 @@ cd app/native-server && npx ts-node src/scripts/build.ts
 ### Dev extension ID differs from production
 
 When you load the extension unpacked in Chrome, it gets a different extension ID than the
-published version. You must add your dev extension ID to the native messaging host manifest
-(`~/.config/google-chrome/NativeMessagingHosts/com.chromemcp.nativehost.json`) in the
-`allowed_origins` array for native messaging to work.
+published version (Chrome derives it from the folder path). Registering the host from a checkout
+(`pnpm --filter mcp-chrome-bridge register:dev`, or `node app/native-server/dist/cli.js register`)
+adds the ids of `app/chrome-extension/.output/chrome-mv3-dev` and `.output/chrome-mv3` to
+`allowed_origins`, and keeps every id the manifest already allowed. Other ids can be passed in
+`CHROME_MCP_EXTENSION_IDS` (comma separated).
 
 ## 🔧 Development Tips
 

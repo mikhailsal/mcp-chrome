@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onMounted, reactive, ref } from 'vue';
 import { LINKS, NATIVE_HOST } from '@/common/constants';
+import { getServerPort } from '@/common/server-port';
 
 import '../sidepanel/styles/agent-chat.css';
 
-const COMMANDS = {
+const COMMANDS = reactive({
   npmInstall: 'npm install -g mcp-chrome-bridge',
   pnpmInstall: 'pnpm add -g mcp-chrome-bridge',
   yarnInstall: 'yarn global add mcp-chrome-bridge',
@@ -12,7 +13,12 @@ const COMMANDS = {
   doctor: 'mcp-chrome-bridge doctor',
   fix: 'mcp-chrome-bridge doctor --fix',
   report: 'mcp-chrome-bridge report --copy',
-} as const;
+});
+
+// Each Chrome profile has its own server; show the port of this one.
+onMounted(async () => {
+  COMMANDS.mcpUrl = `http://127.0.0.1:${await getServerPort()}/mcp`;
+});
 
 type CommandKey = keyof typeof COMMANDS;
 

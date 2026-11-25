@@ -12,6 +12,49 @@ Complete reference for all available tools and their parameters.
 - [Data Management](#data-management)
 - [Response Format](#response-format)
 
+## 🧭 Several Browsers (STDIO connection)
+
+These tools exist when the client connects through `mcp-server-stdio.js`. See "Several browsers or Chrome profiles at once" in the README.
+
+### `list_browsers`
+
+List the connected browsers, one per Chrome profile.
+
+**Parameters**: None
+
+**Response**:
+
+```json
+{
+  "browsers": [
+    {
+      "id": "3f2a9c1e",
+      "name": "Person 1",
+      "profile": "Default",
+      "port": 12306,
+      "selected": false,
+      "focused": true,
+      "windows": 1,
+      "tabs": 4,
+      "activeTab": { "title": "Inbox", "url": "https://mail.example.com/" }
+    }
+  ],
+  "hint": "Several browsers are connected. Call select_browser, or pass \"browser\" to each tool."
+}
+```
+
+### `select_browser`
+
+Choose the browser the other tools use for the rest of the session.
+
+**Parameters**:
+
+- `browser` (string, required): id, id prefix (4+ characters), profile name or profile folder from `list_browsers`
+
+### The `browser` argument
+
+Every other tool accepts an optional `browser` string with the same values as `select_browser`. It overrides the selection for that one call. With a single connected browser neither the argument nor the selection is needed.
+
 ## 📊 Browser Management
 
 ### `get_windows_and_tabs`
@@ -29,6 +72,7 @@ List all currently open browser windows and tabs.
   "windows": [
     {
       "windowId": 123,
+      "focused": true,
       "tabs": [
         {
           "tabId": 456,

@@ -4,6 +4,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { NativeMessageType } from 'chrome-mcp-shared';
 import { TIMEOUTS } from './constant';
 import fileHandler from './file-handler';
+import { identityFromStartPayload, InstanceRegistration } from './instances/host-registration';
+import type { InstanceRecord } from './instances/registry';
 
 interface PendingRequest {
   resolve: (value: any) => void;
@@ -14,9 +16,20 @@ interface PendingRequest {
 export class NativeMessagingHost {
   private associatedServer: Server | null = null;
   private pendingRequests: Map<string, PendingRequest> = new Map();
+  private registration = new InstanceRegistration();
 
   public setServer(serverInstance: Server): void {
     this.associatedServer = serverInstance;
+  }
+
+  /** Registry record of this host, once its server is listening. */
+  public getInstanceRecord(): InstanceRecord | null {
+    return this.registration.current();
+  }
+
+  /** Drop this host from the instance registry (safe to call repeatedly). */
+  public unregisterInstance(): void {
+    this.registration.unregister();
   }
 
   // add message handler to wait for start server
@@ -120,7 +133,7 @@ export class NativeMessagingHost {
     try {
       switch (message.type) {
         case NativeMessageType.START:
-          await this.startServer(message.payload?.port || 12306);
+          await this.startServer(message.payload);
           break;
         case NativeMessageType.STOP:
           await this.stopServer();
@@ -216,9 +229,10 @@ export class NativeMessagingHost {
   }
 
   /**
-   * Start Fastify server (now accepts Server instance)
+   * Start the Fastify server on the requested port or the next free one, then
+   * register this host so MCP clients can find it among other browsers.
    */
-  private async startServer(port: number): Promise<void> {
+  private async startServer(payload: any): Promise<void> {
     if (!this.associatedServer) {
       this.sendError('Internal error: server instance not set');
       return;
@@ -232,11 +246,13 @@ export class NativeMessagingHost {
         return;
       }
 
-      await this.associatedServer.start(port, this);
+      const requestedPort = Number(payload?.port) || 12306;
+      const port = await this.associatedServer.start(requestedPort, this);
+      const record = this.registration.register(identityFromStartPayload(payload), port);
 
       this.sendMessage({
         type: NativeMessageType.SERVER_STARTED,
-        payload: { port },
+        payload: { port, instanceId: record.instanceId },
       });
     } catch (error: any) {
       this.sendError(`Failed to start server: ${error.message}`);
@@ -262,7 +278,7 @@ export class NativeMessagingHost {
       }
 
       await this.associatedServer.stop();
-      // this.serverStarted = false; // Server should update its own status after successful stop
+      this.registration.unregister();
 
       this.sendMessage({ type: NativeMessageType.SERVER_STOPPED }); // Distinguish from previous 'stopped'
     } catch (error: any) {
@@ -308,6 +324,7 @@ export class NativeMessagingHost {
    * Clean up resources
    */
   private cleanup(): void {
+    this.registration.unregister();
     // Reject all pending requests
     this.pendingRequests.forEach((pending) => {
       clearTimeout(pending.timeoutId);

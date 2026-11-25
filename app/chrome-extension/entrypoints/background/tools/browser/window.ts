@@ -23,6 +23,8 @@ class WindowTool extends BaseBrowserToolExecutor {
 
         return {
           windowId: window.id || 0,
+          // Lets MCP clients tell which browser profile the user is looking at.
+          focused: window.focused || false,
           tabs: tabs,
         };
       });

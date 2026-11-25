@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Several browsers at once**: every Chrome profile with the extension gets its own bridge on the next free port and registers itself in the bridge's state directory. The STDIO server finds all of them, names them after their Chrome profiles and routes calls; new tools `list_browsers` and `select_browser`, and an optional `browser` argument on every tool.
+- `get_windows_and_tabs` marks the focused window (`focused`).
+- Quality gate: `pnpm check` (size limits with an allowlist, lint, typecheck, tests), run by CI and by the pre-push hook.
+
+### Fixed
+
+- Registering the native host no longer drops extension ids that the manifest already allowed, and allows this checkout's unpacked builds, so a dev build keeps connecting after a reinstall of `mcp-chrome-bridge`.
+- A second Chrome profile no longer fails to start its bridge because port 12306 is taken.
+- The popup, the welcome page, the web editor and the quick panel use the port the bridge actually listens on, not 12306 or the saved preference.
+
 ## [v0.0.5]
 
 ### Improved
@@ -70,7 +84,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Core Browser Tools**: Complete set of browser automation tools for web interaction
-
   - **Click Tool**: Intelligent element clicking with coordinate and selector support
   - **Fill Tool**: Form filling with text input and selection capabilities
   - **Screenshot Tool**: Full page and element-specific screenshot capture
@@ -78,20 +91,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Keyboard Tool**: Keyboard input simulation and hotkey support
 
 - **Vector Search Engine**: Advanced semantic search capabilities
-
   - **Content Indexing**: Automatic indexing of browser tab content
   - **Semantic Similarity**: AI-powered text similarity matching
   - **Vector Database**: Efficient storage and retrieval of embeddings
   - **Multi-language Support**: Comprehensive multilingual text processing
 
 - **Native Host Integration**: Seamless communication with external applications
-
   - **Chrome Native Messaging**: Bidirectional communication channel
   - **Cross-platform Support**: Windows, macOS, and Linux compatibility
   - **Message Protocol**: Structured messaging system for tool execution
 
 - **AI Model Integration**: State-of-the-art language models for semantic processing
-
   - **Transformer Models**: Support for multiple pre-trained models
   - **ONNX Runtime**: Optimized model inference with WebAssembly
   - **Model Management**: Dynamic model loading and switching

@@ -23,7 +23,9 @@ process.on('SIGTERM', () => {
   process.exit(0);
 });
 
-process.on('exit', (code) => {
+process.on('exit', () => {
+  // Leave the instance registry so MCP clients stop routing to this browser.
+  nativeMessagingHostInstance.unregisterInstance();
 });
 
 process.on('uncaughtException', (error) => {
